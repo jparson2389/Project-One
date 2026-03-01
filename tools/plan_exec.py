@@ -499,8 +499,11 @@ def call_json_with_retry(
             f"resolved_model={initial.actual_model}"
         )
 
+
 def safe_json_from_model(stage: str, raw_text: str) -> dict[str, Any]:
-    dump_path = ROOT / "logs" / f"plan_exec_{stage}_failed_{_now_iso().replace(':', '-')}.txt"
+    dump_path = (
+        ROOT / "logs" / f"plan_exec_{stage}_failed_{_now_iso().replace(':', '-')}.txt"
+    )
     return parse_json_object(raw_text, stage=stage, dump_on_failure=dump_path)
 
     repair_user = (
