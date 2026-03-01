@@ -1,0 +1,11 @@
+{
+  "base_url": "http://127.0.0.1:4000/v1",
+  "api_key": "anything",
+  "role_to_model": {
+    "Core Runtime Architect": "architect",
+    "UX & Host Shell (PySide6)": "ui-ux",
+    "Native I/O & Capture Systems": "architect",
+    "Runtime Services & Isolation": "architect",
+    "Platform & Entitlements": "pm"
+  }
+}  

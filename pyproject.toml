@@ -1,0 +1,75 @@
+[project]
+name = "aetherlink"
+version = "0.1.0"
+description = "Aetherlink is a high-performance controller adapter ecosystem for gaming. It is designed to be a fast, reliable, and easy to use solution for gaming."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "grpcio>=1.78.0",
+    "grpcio-tools>=1.78.0",
+    "loguru>=0.7.3",
+    "mss>=10.1.0",
+    "numpy>=2.4.2",
+    "opencv-python>=4.13.0.92",
+    "protobuf>=6.33.5",
+    "pydantic>=2.12.5",
+    "pyside6==6.9.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.9.0",
+]
+automation = [
+    "openai>=1.40.0",
+    "anyio>=4.0.0",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["aetherlink"]
+
+[project.scripts]
+aetherlink = "aetherlink.main:main"
+
+[project.gui-scripts]
+aetherlink-gui = "aetherlink.main:main"
+
+[build-system]
+requires = ["uv_build>=0.10.2,<0.11.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+fix = true
+indent-width = 4
+src = ["src"]
+extend-exclude = ["*_pb2.py", "*_pb2_grpc.py", ".venv", "src/aetherlink/plugins/_stubs"]
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "N", "UP", "B", "A", "C4", "RUF", "D", "T"]
+ignore = [
+    "E203",
+    "D203",
+    "D213", # pick ONE of D212/D213; keep D212 behavior + silence warning
+]
+
+[tool.ruff.format]
+docstring-code-line-length = 60
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint.isort]
+known-first-party = ["aetherlink"]
+combine-as-imports = true
+
+[tool.ruff.lint.per-file-ignores]
+"tools/**/*.py" = ["D", "T201"]
+"tests/**/*.py" = ["D"]
+"src/**/__init__.py" = ["D104"]
+"src/aetherlink/plugins/*.py" = ["D", "N", "E501"]

@@ -1,0 +1,13 @@
+{
+    "venvPath": ".",
+    "venv": ".venv",
+  
+    "exclude": [
+      "**/site-packages/**",
+      "**/Lib/**",
+      "**/AppData/Roaming/uv/**"
+    ],
+  
+    "reportMissingImports": false,
+    "reportMissingModuleSource": false
+  }

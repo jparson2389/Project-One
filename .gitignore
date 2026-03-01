@@ -1,0 +1,109 @@
+# --- Python & UV ---
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.python-version
+.uv/
+
+# --- gRPC Generated Files (Python & C++) ---
+# We keep .proto, but ignore the messy generated source
+*_pb2.py
+*_pb2_grpc.py
+*.pb.cc
+*.pb.h
+*.grpc.pb.cc
+*.grpc.pb.h
+
+# --- Aetherlink UI & Machine Learning ---
+# OpenCV/mss sometimes create temp buffers; PySide6 creates local state
+.qt/
+*.log
+screenshot*.png
+screenshot*.jpg
+
+# Cursor files
+.cursor/
+.agents/
+*.agents/
+.codex/
+*.codex
+.cursorrules
+.history/
+*.log
+
+# --- IDEs & Tools ---
+.vscode/
+.history/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.vs/
+*.user
+*.suo
+*.sln
+*.vcxproj
+*.filters
+
+# --- C++ Build Outputs (Windows/MSVC/CMake) ---
+*.obj
+*.exe
+*.pdb
+*.ilk
+*.lib
+*.dll
+*.exp
+build/
+out/
+x64/
+Release/
+Debug/
+
+# --- Environment / Secrets (CRITICAL) ---
+.env
+.env.local
+.env.shared
+.env.test
+secrets.json
+*.pem
+*.key
+
+# ruff stuff
+.ruff_cache/
+
+# Ignore all text files
+*.txt
+
+# But DO track these specific ones
+!README.txt
+!LICENSE.txt
+.codex/
+.agents/
+
+# --- Windows System Files ---
+[Dd]esktop.ini
+Thumbs.db
+$RECYCLE.BIN/
+
+# --- Build & Distribution ---
+dist/
+build/
+*.egg-info/
+
+# Explicitly ignore these exact files
+Notes.txt
+structure.txt
+STRUCTUREDOUTPUT.md
+UPDATE.md
+Layout-Endgoal.txt
+
+# Ignore a specific file inside a subfolder
+docs/commands.md
+
+
+
+
+
+
+
+

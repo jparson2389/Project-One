@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package capture;
+
+message CaptureMode {
+  int32 capture_width = 1;
+  int32 capture_height = 2;
+  int32 capture_fps = 3;
+  string pixel_format_in = 4;
+  string pixel_format_out = 5;
+  bool zero_copy_supported = 6;
+  bool hdr_supported = 7;
+  repeated CaptureMode passthrough_supported_modes = 8;
+  string notes = 9;
+}
+
+message CapturePlugin {
+  string plugin_id = 1;
+  string name = 2;
+  string version = 3;
+  int32 api_version = 4;
+  string plugin_type = 5;
+  repeated CaptureMode modes = 6;
+  repeated string required_entitlements = 7;
+  repeated string requires_drivers = 8;
+  bool requires_worker = 9;
+}

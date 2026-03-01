@@ -1,0 +1,9 @@
+{
+    "steps": [
+      { "id": "plan", "agent": "pm" },
+      { "id": "architecture", "agent": "architect" },
+      { "id": "ui", "agent": "ui-ux" },
+      { "id": "fix", "agent": "quick-fix" },
+      { "id": "trace", "agent": "researcher" }
+    ]
+  }

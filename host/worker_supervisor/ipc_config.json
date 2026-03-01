@@ -1,0 +1,1 @@
+{"endpoints": ["/worker/capability_filter", "/worker/supervision"], "capability_matrix_filters": [{"plugin_type": "capture", "filters": ["fps>=60", "resolution=1080p"]}]}

@@ -1,0 +1,235 @@
+{
+  "version": 1,
+  "updated_at": "2026-02-24T12:23:06",
+  "items": [
+    {
+      "id": "phase_0__freeze_plugin_abi",
+      "phase": "Phase 0",
+      "title": "Freeze plugin ABI",
+      "status": "done",
+      "notes": "Execution started",
+      "updated_at": "2026-02-19T13:57:47",
+      "missing": [],
+      "evidence": [
+        "docs\\PLAN.md"
+      ]
+    },
+    {
+      "id": "phase_0__freeze_grpc_proto",
+      "phase": "Phase 0",
+      "title": "Freeze gRPC proto",
+      "status": "done",
+      "notes": "none",
+      "updated_at": "2026-02-20T13:16:09",
+      "missing": [],
+      "evidence": [
+        "proto\\capture.proto"
+      ]
+    },
+    {
+      "id": "phase_0__define_shared_memory_layout",
+      "phase": "Phase 0",
+      "title": "Define shared memory layout",
+      "status": "blocked",
+      "notes": "Quality failing",
+      "updated_at": "2026-02-24T12:23:06",
+      "missing": [
+        "Quality"
+      ],
+      "evidence": [
+        "src\\aetherlink\\shared_memory.py",
+        "src\\aetherlink\\shared_memory.py"
+      ]
+    },
+    {
+      "id": "phase_1__deliver_basic_pyside6_shell",
+      "phase": "Phase 1",
+      "title": "Deliver basic PySide6 shell",
+      "status": "missing",
+      "notes": "",
+      "updated_at": "2026-02-19T13:53:39",
+      "missing": [],
+      "evidence": []
+    },
+    {
+      "id": "phase_1__implement_baseline_input_and_output_plugins",
+      "phase": "Phase 1",
+      "title": "Implement baseline input and output plugins",
+      "status": "missing",
+      "notes": "",
+      "updated_at": "2026-02-19T13:53:39",
+      "missing": [],
+      "evidence": []
+    },
+    {
+      "id": "phase_2__deliver_opencv_capture_plugin",
+      "phase": "Phase 2",
+      "title": "Deliver OpenCV capture plugin",
+      "status": "missing",
+      "notes": "",
+      "updated_at": "2026-02-19T13:53:39",
+      "missing": [],
+      "evidence": []
+    },
+    {
+      "id": "phase_2__implement_capability_matrix_filtering",
+      "phase": "Phase 2",
+      "title": "Implement capability matrix filtering",
+      "status": "missing",
+      "notes": "",
+      "updated_at": "2026-02-19T13:53:39",
+      "missing": [],
+      "evidence": []
+    },
+    {
+      "id": "phase_2__implement_worker_supervisor_ipc",
+      "phase": "Phase 2",
+      "title": "Implement worker supervisor + IPC",
+      "status": "missing",
+      "notes": "",
+      "updated_at": "2026-02-19T13:53:39",
+      "missing": [],
+      "evidence": []
+    },
+    {
+      "id": "phase_2__add_performance_hud",
+      "phase": "Phase 2",
+      "title": "Add performance HUD",
+      "status": "missing",
+      "notes": "",
+      "updated_at": "2026-02-19T13:53:39",
+      "missing": [],
+      "evidence": []
+    },
+    {
+      "id": "phase_3__implement_uv_environment_management",
+      "phase": "Phase 3",
+      "title": "Implement uv environment management",
+      "status": "missing",
+      "notes": "",
+      "updated_at": "2026-02-19T13:53:39",
+      "missing": [],
+      "evidence": []
+    },
+    {
+      "id": "phase_3__deliver_environment_bundle_installer",
+      "phase": "Phase 3",
+      "title": "Deliver environment bundle installer",
+      "status": "missing",
+      "notes": "",
+      "updated_at": "2026-02-19T13:53:39",
+      "missing": [],
+      "evidence": []
+    },
+    {
+      "id": "phase_3__implement_signed_artifact_verification",
+      "phase": "Phase 3",
+      "title": "Implement signed artifact verification",
+      "status": "missing",
+      "notes": "",
+      "updated_at": "2026-02-19T13:53:39",
+      "missing": [],
+      "evidence": []
+    },
+    {
+      "id": "phase_3__add_resource_browsing_and_install_ui",
+      "phase": "Phase 3",
+      "title": "Add resource browsing and install UI",
+      "status": "missing",
+      "notes": "",
+      "updated_at": "2026-02-19T13:53:39",
+      "missing": [],
+      "evidence": []
+    },
+    {
+      "id": "phase_4__implement_entitlement_validation",
+      "phase": "Phase 4",
+      "title": "Implement entitlement validation",
+      "status": "missing",
+      "notes": "",
+      "updated_at": "2026-02-19T13:53:39",
+      "missing": [],
+      "evidence": []
+    },
+    {
+      "id": "phase_4__implement_premium_plugin_gating",
+      "phase": "Phase 4",
+      "title": "Implement premium plugin gating",
+      "status": "missing",
+      "notes": "",
+      "updated_at": "2026-02-19T13:53:39",
+      "missing": [],
+      "evidence": []
+    },
+    {
+      "id": "phase_4__deliver_admin_apis",
+      "phase": "Phase 4",
+      "title": "Deliver admin APIs",
+      "status": "missing",
+      "notes": "",
+      "updated_at": "2026-02-19T13:53:39",
+      "missing": [],
+      "evidence": []
+    },
+    {
+      "id": "phase_4__implement_offline_grace_logic",
+      "phase": "Phase 4",
+      "title": "Implement offline grace logic",
+      "status": "missing",
+      "notes": "",
+      "updated_at": "2026-02-19T13:53:39",
+      "missing": [],
+      "evidence": []
+    }
+  ],
+  "history": [
+    {
+      "timestamp": "2026-02-19T13:50:11",
+      "phase": "Phase 0",
+      "title": "Freeze plugin ABI",
+      "status": "partial",
+      "changed_files": [
+        "docs\\PLAN.md"
+      ],
+      "missing": [
+        "PRD excerpt"
+      ],
+      "notes": "PM verification failed"
+    },
+    {
+      "timestamp": "2026-02-19T13:56:07",
+      "phase": "Phase 0",
+      "title": "Freeze plugin ABI",
+      "status": "partial",
+      "changed_files": [
+        "relative\\path"
+      ],
+      "missing": [
+        "PRD excerpt"
+      ],
+      "notes": "PM verification failed"
+    },
+    {
+      "timestamp": "2026-02-19T13:57:47",
+      "phase": "Phase 0",
+      "title": "Freeze plugin ABI",
+      "status": "done",
+      "changed_files": [
+        "docs\\PLAN.md"
+      ],
+      "missing": [],
+      "notes": ""
+    },
+    {
+      "timestamp": "2026-02-20T13:16:09",
+      "phase": "Phase 0",
+      "title": "Freeze gRPC proto",
+      "status": "done",
+      "changed_files": [
+        "proto\\capture.proto"
+      ],
+      "missing": [],
+      "notes": "none"
+    }
+  ]
+}
