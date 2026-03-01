@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
 from pathlib import Path
 from typing import Any
 
 from openai import OpenAI
+
+try:
+    from tools.json_utils import parse_json_object
+except ModuleNotFoundError:
+    from json_utils import parse_json_object  # type: ignore[no-redef]
+
 
 SYSTEM_JSON_WRITES = '''
 Return ONLY valid JSON.
@@ -75,28 +80,10 @@ def _extract_first_json_object(text: str) -> str | None:
 
 
 def _parse_json(s: str) -> dict[str, Any] | None:
-    text = s.strip()
-    candidates: list[str] = []
-    if text:
-        candidates.append(text)
-
-    fenced = _extract_fenced_json(text)
-    if fenced:
-        candidates.append(fenced)
-
-    first_obj = _extract_first_json_object(text)
-    if first_obj:
-        candidates.append(first_obj)
-
-    for candidate in candidates:
-        try:
-            payload = json.loads(candidate)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(payload, dict):
-            return payload
-
-    return None
+    try:
+        return parse_json_object(s, stage="agent_call")
+    except ValueError:
+        return None
 
 
 def main() -> int:
