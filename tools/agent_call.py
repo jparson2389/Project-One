@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -13,22 +12,23 @@ try:
 except ModuleNotFoundError:
     from json_utils import parse_json_object  # type: ignore[no-redef]
 
-
 SYSTEM_JSON_WRITES = '''
 Return ONLY valid JSON.
-
 CRITICAL JSON ESCAPING RULES:
 - The value of writes[i].content must be a valid JSON string.
 - Do NOT include unescaped double quotes (") inside writes[i].content.
 - Do NOT use Python triple-double-quoted docstrings (""") anywhere in writes[i].content.
 - Prefer single quotes in Python code, or omit docstrings entirely.
 - If a double quote is required in code, escape it as \\".
-
+PYTHON RULES:
+- Follow PEP 8 strictly.
+- Use type hinting for all function signatures.
+- Prefer pydantic for data validation and asyncio for I/O bound tasks.
+- Include Docstrings in Google Format.
 {
   "writes": [{"path": "relative/path", "content": "file contents"}],
   "notes": "short"
 }
-
 No markdown fences. No extra keys.
 All writes[].path values MUST be repository-relative paths (never absolute).
 '''
@@ -36,47 +36,6 @@ All writes[].path values MUST be repository-relative paths (never absolute).
 
 def _read(path: str) -> str:
     return Path(path).read_text(encoding="utf-8", errors="ignore")
-
-
-def _extract_fenced_json(text: str) -> str | None:
-    match = re.search(
-        r"```(?:json)?\s*(\{.*?\})\s*```", text, re.IGNORECASE | re.DOTALL
-    )
-    if match:
-        return match.group(1).strip()
-    return None
-
-
-def _extract_first_json_object(text: str) -> str | None:
-    start = -1
-    depth = 0
-    in_string = False
-    escape = False
-
-    for idx, ch in enumerate(text):
-        if in_string:
-            if escape:
-                escape = False
-            elif ch == "\\":
-                escape = True
-            elif ch == '"':
-                in_string = False
-            continue
-
-        if ch == '"':
-            in_string = True
-            continue
-
-        if ch == "{":
-            if depth == 0:
-                start = idx
-            depth += 1
-        elif ch == "}" and depth > 0:
-            depth -= 1
-            if depth == 0 and start >= 0:
-                return text[start : idx + 1].strip()
-
-    return None
 
 
 def _parse_json(s: str) -> dict[str, Any] | None:
@@ -116,7 +75,14 @@ def main() -> int:
                 ctx.append(f"\n\n# FILE: {inc}\n{_read(inc)}")
             else:
                 ctx.append(f"\n\n# FILE: {inc}\n<missing>")
-        prompt = prompt + "\n" + "\n".join(ctx)
+        import subprocess
+
+        try:
+            tree = subprocess.getoutput("tree -I '__pycache__|venv|.git' .")
+        except Exception:
+            tree = "tree command not available"
+
+        prompt = f"DIRECTORY STRUCTURE:\n{tree}\n\n" + prompt + "\n" + "\n".join(ctx)
 
     client = OpenAI(base_url=args.base_url, api_key=args.api_key)
 

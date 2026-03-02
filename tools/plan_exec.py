@@ -13,8 +13,6 @@ from typing import Any
 from loguru import logger
 from openai import OpenAI
 
-from tools.json_utils import parse_json_object
-
 ROOT = Path(__file__).resolve().parents[1]
 STATE_PATH = ROOT / "state" / "plan_state.json"
 
@@ -121,7 +119,7 @@ except ModuleNotFoundError:  # pragma: no cover
 
 try:
     from tools.json_utils import safe_json_from_model  # type: ignore
-except ModuleNotFoundError:  # pragma: no cover
+except ModuleNotFoundError:
     from json_utils import safe_json_from_model  # type: ignore[no-redef]
 
 
@@ -499,12 +497,10 @@ def call_json_with_retry(
             f"resolved_model={initial.actual_model}"
         )
 
-
-def safe_json_from_model(stage: str, raw_text: str) -> dict[str, Any]:
-    dump_path = (
-        ROOT / "logs" / f"plan_exec_{stage}_failed_{_now_iso().replace(':', '-')}.txt"
-    )
-    return parse_json_object(raw_text, stage=stage, dump_on_failure=dump_path)
+    try:
+        return safe_json_from_model(stage, initial.content)
+    except ValueError:
+        first_dump = _write_failed_response(stage, "first", initial.content)
 
     repair_user = (
         "Your previous response was invalid for this task.\n"
@@ -526,7 +522,6 @@ def safe_json_from_model(stage: str, raw_text: str) -> dict[str, Any]:
             f"[llm] stage={stage} retry=1 pm_fallback_used=true "
             f"resolved_model={repaired.actual_model}"
         )
-
     try:
         return safe_json_from_model(stage, repaired.content)
     except ValueError as exc:
@@ -591,24 +586,18 @@ def quality_scope_args(changed_files: list[str]) -> list[str]:
 def extract_plan_phase_summary(plan: str, max_chars: int = 12000) -> str:
     """Shrinks PLAN.md while preserving only Phase sections and their tasks."""
     keep: list[str] = []
-    in_phase = False
-
     for line in plan.splitlines():
-        # Detect phase headers
-        if re.match(r"^\s*##\s+Phase\s+\d+", line, re.I):
-            in_phase = True
+        # Check for Phase headers
+        if re.match(r"^\s*## Phase", line, re.I):
             keep.append(line)
             continue
-
-        # Stop capture at any other level-2 header
-        if re.match(r"^\s*##\s+", line) and not re.match(
-            r"^\s*##\s+Phase\s+\d+", line, re.I
-        ):
-            in_phase = False
-
-        if in_phase:
+        # Check for Exit Criteria
+        if re.match(r"^\s*Exit Criteria", line, re.I):
             keep.append(line)
-
+            continue
+        # Check for Task items (-) or Instructions (>)
+        if re.match(r"^\s*[-\>]", line):
+            keep.append(line)
     result_text = "\n".join(keep)
     return result_text[:max_chars]
 
@@ -618,19 +607,15 @@ def extract_prd_hard_requirements(prd: str, max_chars: int = 12000) -> str:
     keep: list[str] = []
     capture = False
     targets = {"architectural", "plugin system", "capture system"}
-
     for line in prd.splitlines():
         # Regex looks for '##' regardless of leading whitespace
         header_match = re.match(r"^\s*##\s+(.*)$", line)
-
         if header_match:
             header_content = header_match.group(1).lower()
             # Start capturing if header matches keywords
             capture = any(t in header_content for t in targets)
-
         if capture:
             keep.append(line)
-
     # Fallback to whole doc if no specific sections were caught
     result_text = "\n".join(keep) if keep else prd
     return result_text[:max_chars]
@@ -1062,6 +1047,9 @@ def main(argv: list[str] | None = None) -> int:
         evidence=changed,
     )
     save_plan_state(state)
+    return 0
+
+    return 1
 
 
 if __name__ == "__main__":
