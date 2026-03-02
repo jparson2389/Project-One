@@ -44,9 +44,10 @@
   - Agents must NOT create new automation folders outside these.
 
 - **Distribution (Runtime ZIP Layout)**
+  - (These exist only inside the final `dist/AetherLink.zip` output, NOT in the dev root)
   - `AetherLink.exe`
-  - `lib/`
-  - `plugins/`
+  - `lib/` (Compiled dependencies)
+  - `plugins/` (Compiled `.dll` files ONLY)
   - `assets/`
   - `scripts/`
   - This structure is runtime-only. Agents do NOT write here during normal development.
@@ -63,8 +64,8 @@
   - `.pytest_cache/`
   - `.ruff_cache/`
   - Generated protobuf files (`*_pb2.py`, `*_pb2_grpc.py`) should not be manually edited.
-  - NO HALLUCINATED FOLDERS: Do not create capture_system/, engine/, core/(at root), protos/(use proto/), or relative/.
-  - STRICT SEPARATION: Never write C++(.cpp/.h) files inside the src/ directory. src/ is exclusively for Python(src/aetherlink/).Native plugins go in plugins/ and native headers go in include/.
+  - **NO HALLUCINATED FOLDERS**: Do not create capture_system/, engine/, core/(at root), protos/(use proto/), or relative/.
+  - **STRICT SEPARATION**: Never write C++ (.cpp/.h) files inside the src/ directory. src/ is exclusively for Python (src/aetherlink/). Native C++ plugin source code goes in the root plugins/ folder, and native headers go in the root include/ folder.
 
 - **Native Development (C++)**
   - `host/`→ C++ source files (`.cpp`).
@@ -90,13 +91,10 @@
 
 ## ⚡ Quality Control & Commands
 
-| Task | Command |
-| :-- | :-- |
-| **Install** | `uv sync` |
-| **Format** | `uv run ruff format .` |
-| **Lint & Fix** | `uv run ruff check --fix .` |
-| **Test** | `uv run pytest` |
-| **Clean Cache** | `powershell -Command "Remove-Item -Recurse -Force ./**/__pycache__, ./.pytest_cache, ./.ruff_cache"` |
+- **UV Management**: Run `uv sync` to sync environment.
+- **Format**: Always use `uv run ruff format` to Format Python code.
+- **Lint & Fix**: Ruff `uv run ruff check --fix`
+- **Test**: Always use `uv run pytest` for testing.
 
 ## 📦 Project Specifics
 

@@ -1,7 +1,4 @@
-<<<<<<< HEAD
 from PySide6.QtWidgets import QLabel, QMainWindow, QVBoxLayout, QWidget
-
-from aetherlink.main import app
 
 
 class MainWindow(QMainWindow):
@@ -29,14 +26,3 @@ class MainWindow(QMainWindow):
         # Add basic UI elements
         label = QLabel("Aetherlink UI Shell")
         layout.addWidget(label)
-=======
-from PyQt6.QtWidgets import QWidget, QVBoxLayout
-
-class MainWindow(QWidget):
-    def __init__(self):
-        super().__init__()
-        # UI initialization code goes here
-        layout = QVBoxLayout()
-        # Add widgets to the layout here
-        self.setLayout(layout)
->>>>>>> 572fac7 (feat: added blank space)

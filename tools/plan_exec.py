@@ -1017,25 +1017,27 @@ def main(argv: list[str] | None = None) -> int:
             )
             notes = str(verdict.get("notes", "")).strip()
 
-        if attempt < max_retries - 1:
-            logger.warning(f"PM Verify Failed. Notes: {notes}")
-            fix_prompt = (
-                f"PM Verification Failed. Notes: {notes}\nMissing:\n"
-                + "\n".join(missing_list)
-            )
-            continue
-        else:
-            logger.error("Task Partial: PM verify failed after physical gate passed.")
-            update_state_item(
-                state,
-                selected_item_id,
-                status="partial",
-                notes=notes or "PM verification failed",
-                missing=missing_list,
-                evidence=changed,
-            )
-            save_plan_state(state)
-            return 1
+            if attempt < max_retries - 1:
+                logger.warning(f"PM Verify Failed. Notes: {notes}")
+                fix_prompt = (
+                    f"PM Verification Failed. Notes: {notes}\nMissing:\n"
+                    + "\n".join(missing_list)
+                )
+                continue
+            else:
+                logger.error(
+                    "Task Partial: PM verify failed after physical gate passed."
+                )
+                update_state_item(
+                    state,
+                    selected_item_id,
+                    status="partial",
+                    notes=notes or "PM verification failed",
+                    missing=missing_list,
+                    evidence=changed,
+                )
+                save_plan_state(state)
+                return 1
 
     logger.success(f"Task Done: {selected_title} — all 3 layers passed.")
     update_state_item(
