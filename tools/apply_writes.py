@@ -74,53 +74,31 @@ def is_write_path_allowed(path: str) -> bool:
 
 
 def validate_writes_payload(payload: dict[str, Any]) -> None:
-    writes = payload.get("writes")
-    if not isinstance(writes, list):
-        raise ValueError("Invalid writes payload: 'writes' must be a list.")
+    """Validate the writes payload using the Pydantic WritesPayload model.
 
-    for idx, item in enumerate(writes):
-        if not isinstance(item, dict):
-            raise ValueError(
-                f"Invalid writes payload at index {idx}: entry is not an object."
-            )
-        path = item.get("path")
-        content = item.get("content")
-        if not isinstance(path, str) or not isinstance(content, str):
-            raise ValueError(
-                f"Invalid writes payload at index {idx}: "
-                f"'path' and 'content' must be strings."
-            )
+    Args:
+        payload: Raw dict from LLM JSON output.
 
-        clean_path = path.strip()
-        if not clean_path:
-            raise ValueError(f"Invalid writes payload at index {idx}: path is empty.")
-        if clean_path.startswith(("/", "\\")) or re.match(
-            r"^[A-Za-z]:[\\/]", clean_path
-        ):
-            raise ValueError(
-                f"Invalid writes payload at index {idx}: path '{path}' is absolute. "
-                "Use repository-relative paths."
-            )
+    Raises:
+        ValueError: If any write entry violates path or content rules.
+    """
+    try:
+        from validation_gate import WritesPayload
+    except ModuleNotFoundError:
+        from tools.validation_gate import WritesPayload  # type: ignore[no-redef]
 
-        normalized = clean_path.replace("\\", "/").lstrip("./")
+    model = WritesPayload.model_validate(payload)
+    for entry in model.writes:
+        clean = entry.path.strip()
+        if not clean:
+            raise ValueError("Empty path in write entry.")
+        if clean.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:[\\/]", clean):
+            raise ValueError(f"Absolute path not allowed: {entry.path!r}")
+        normalized = clean.replace("\\", "/").lstrip("./")
         if "/../" in f"/{normalized}/" or normalized in {"..", "."}:
-            raise ValueError(
-                f"Invalid writes payload at index {idx}: "
-                f"path '{path}' contains traversal components."
-            )
-
-        if not is_write_path_allowed(clean_path):
-            raise ValueError(
-                f"Invalid writes payload at index {idx}: path '{path}' is not allowed."
-            )
-
-        # Check for triple-quoted strings (docstrings)
-        if '"""' in content:
-            raise ValueError(
-                f"Invalid writes payload at index {idx}: "
-                'content contains forbidden triple-quoted docstring ("""). '
-                "Use single quotes or omit docstrings entirely."
-            )
+            raise ValueError(f"Path traversal not allowed: {entry.path!r}")
+        if not is_write_path_allowed(clean):
+            raise ValueError(f"Path not in allowed locations: {entry.path!r}")
 
 
 def _safe_path(repo_root: Path, rel: str) -> Path:

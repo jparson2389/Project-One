@@ -13,8 +13,28 @@ from typing import Any
 from loguru import logger
 from openai import OpenAI
 
+try:
+    from tools.context_utils import ContextMonitor
+except ModuleNotFoundError:
+    from context_utils import ContextMonitor  # type: ignore[no-redef]
+
+try:
+    from tools.json_utils import safe_json_from_model
+except ModuleNotFoundError:
+    from json_utils import safe_json_from_model  # type: ignore[no-redef]
+
+try:
+    from tools.prompts import SYSTEM_JSON_WRITES
+except ModuleNotFoundError:
+    from prompts import SYSTEM_JSON_WRITES  # type: ignore[no-redef]
+
 ROOT = Path(__file__).resolve().parents[1]
 STATE_PATH = ROOT / "state" / "plan_state.json"
+
+_AGENTS_MD_PATH = ROOT / "AGENTS.md"
+_AGENTS_MD = (
+    _AGENTS_MD_PATH.read_text(encoding="utf-8") if _AGENTS_MD_PATH.exists() else ""
+)
 
 # Configure Loguru to write to a specfic logs folder
 LOG_DIR = ROOT / "logs"
@@ -49,24 +69,16 @@ Rules:
 No extra keys. No markdown.
 """
 
-SYSTEM_JSON_WRITES = '''
-Return ONLY valid JSON.
 
-CRITICAL JSON ESCAPING RULES:
-- The value of writes[i].content must be a valid JSON string.
-- Do NOT include unescaped double quotes (") inside writes[i].content.
-- Do NOT use Python triple-double-quoted docstrings (""") anywhere in writes[i].content.
-- Prefer single quotes in Python code, or omit docstrings entirely.
-- If a double quote is required in code, escape it as \\".
+def _build_impl_system() -> str:
+    """Build the implementation system prompt with AGENTS.md injected."""
+    agents_block = (
+        f"\n\n# PROJECT RULES (AGENTS.md - authoritative)\n{_AGENTS_MD}\n"
+        if _AGENTS_MD
+        else ""
+    )
+    return SYSTEM_JSON_WRITES + agents_block
 
-{
-  "writes": [{"path": "relative/path", "content": "file contents"}],
-  "notes": "short"
-}
-
-No markdown fences. No extra keys.
-All writes[].path values MUST be repository-relative paths (never absolute).
-'''
 
 SYSTEM_PM_VERIFY = """
 Return ONLY valid JSON:
@@ -103,6 +115,30 @@ SCHEMA_PM_VERIFY = """{
   "missing": ["..."],
   "notes": "short"
 }"""
+
+SCHEMA_HINT_IMPL = """\
+REQUIRED JSON SCHEMA - writes payload:
+{
+  "writes": [
+    {
+      "path": "src/aetherlink/<module>/<file>.py",
+      "content": "<full file content - single-quoted docstrings only>"
+    }
+  ],
+  "notes": "<one-sentence summary>"
+}
+
+HARD RULES:
+- writes[].path must start with one of: src/aetherlink/, tests/, tools/,
+proto/, assets/, docs/, state/
+- writes[].path must NEVER be: src/plugins/*, *.cpp, *.h inside src/
+- writes[].content must NEVER contain triple double-quotes ("\"\")
+- Use single-quoted docstrings: '''Google-style docstring.'''
+- All function signatures must include type hints
+- All public functions must have a Google-style single-quoted docstring
+- No placeholder paths like "relative/path" or "path/to/file"
+- No absolute paths
+"""
 
 try:
     from tools.apply_writes import (  # type: ignore
@@ -484,7 +520,7 @@ def call_json_with_retry(
     temperature: float | None = None,  # let the model use its default temperature
 ) -> dict[str, Any]:
     initial = call(client, model, system, user, temperature=temperature)
-    print(
+    logger.debug(
         f"[llm] stage={stage} requested_alias={initial.requested_model} "
         f"actual_model={initial.actual_model} chars={len(initial.content)}"
     )
@@ -492,7 +528,7 @@ def call_json_with_retry(
         initial.requested_model == "pm"
         and "deepseek" not in initial.actual_model.lower()
     ):
-        print(
+        logger.debug(
             f"[llm] stage={stage} pm_fallback_used=true "
             f"resolved_model={initial.actual_model}"
         )
@@ -510,7 +546,7 @@ def call_json_with_retry(
         f"{initial.content}"
     )
     repaired = call(client, model, system, repair_user, temperature=0.0)
-    print(
+    logger.debug(
         f"[llm] stage={stage} retry=1 requested_alias={repaired.requested_model} "
         f"actual_model={repaired.actual_model} chars={len(repaired.content)}"
     )
@@ -518,7 +554,7 @@ def call_json_with_retry(
         repaired.requested_model == "pm"
         and "deepseek" not in repaired.actual_model.lower()
     ):
-        print(
+        logger.debug(
             f"[llm] stage={stage} retry=1 pm_fallback_used=true "
             f"resolved_model={repaired.actual_model}"
         )
@@ -631,6 +667,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--manifest", default="agent_manifest.json")
     args = ap.parse_args(argv if argv is not None else sys.argv[1:])
     manifest = json.loads((ROOT / args.manifest).read_text(encoding="utf-8"))
+    _ctx_monitor = ContextMonitor()
     client = OpenAI(
         base_url=manifest["base_url"],
         api_key=manifest["api_key"],
@@ -709,7 +746,6 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     pm_alias = "pm"
-
     queue = call_json_with_retry(
         client=client,
         stage="pm_next",
@@ -816,14 +852,22 @@ def main(argv: list[str] | None = None) -> int:
 
         # FIX 2b: Use explicit router alias
         model_alias = selected_agent
+        prompt_len = len(impl_prompt.split())
+        max_window = 16384
+        if not _ctx_monitor.track_usage(model_alias, prompt_len, max_window):
+            logger.warning(
+                f"[context] prompt near limit for {model_alias} - truncating"
+            )
+            prd_summary = _clip(prd_summary, 4000)
+            plan_summary = _clip(plan_summary, 4000)
 
         impl_payload = call_json_with_retry(
             client=client,
             stage=f"impl_{selected_agent}",
             model=model_alias,
-            system=SYSTEM_JSON_WRITES,
+            system=_build_impl_system(),
             user=impl_prompt,
-            schema_hint=SCHEMA_JSON_WRITES,
+            schema_hint=SCHEMA_HINT_IMPL,
             temperature=None,
         )
 
@@ -848,6 +892,28 @@ def main(argv: list[str] | None = None) -> int:
             raise
 
         changed = apply_writes_relpaths(impl_payload)
+        # Hard Gate: refuse to proceed if no files were written.
+        if not changed:
+            no_write_msg = (
+                "Implementation returned no file writes. "
+                "Return real code, not stubs or comments."
+            )
+            if attempt < max_retries - 1:
+                logger.warning(f"Attempt {attempt + 1}: {no_write_msg}")
+                fix_prompt = no_write_msg
+                continue
+            else:
+                logger.error("Task Blocked: No files written on final attempt.")
+                update_state_item(
+                    state,
+                    selected_item_id,
+                    status="blocked",
+                    notes=no_write_msg,
+                    missing=["No files written"],
+                    evidence=[],
+                )
+                save_plan_state(state)
+                return 1
 
         logger.info(
             f"Execution Summary | Phase: {selected_phase} | "
@@ -896,9 +962,9 @@ def main(argv: list[str] | None = None) -> int:
                     client=client,
                     stage="quick_fix",
                     model="quick-fix",
-                    system=SYSTEM_JSON_WRITES,
+                    system=_build_impl_system(),
                     user=q_fix_prompt,
-                    schema_hint=SCHEMA_JSON_WRITES,
+                    schema_hint=SCHEMA_HINT_IMPL,
                     temperature=None,
                 )
             except ValueError as exc:
@@ -1038,6 +1104,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 save_plan_state(state)
                 return 1
+        # All 3 layers passed - exit the retry loop immediately
+        break
 
     logger.success(f"Task Done: {selected_title} — all 3 layers passed.")
     update_state_item(
@@ -1050,8 +1118,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     save_plan_state(state)
     return 0
-
-    return 1
 
 
 if __name__ == "__main__":

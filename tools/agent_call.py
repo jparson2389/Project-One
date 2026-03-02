@@ -12,26 +12,10 @@ try:
 except ModuleNotFoundError:
     from json_utils import parse_json_object  # type: ignore[no-redef]
 
-SYSTEM_JSON_WRITES = '''
-Return ONLY valid JSON.
-CRITICAL JSON ESCAPING RULES:
-- The value of writes[i].content must be a valid JSON string.
-- Do NOT include unescaped double quotes (") inside writes[i].content.
-- Do NOT use Python triple-double-quoted docstrings (""") anywhere in writes[i].content.
-- Prefer single quotes in Python code, or omit docstrings entirely.
-- If a double quote is required in code, escape it as \\".
-PYTHON RULES:
-- Follow PEP 8 strictly.
-- Use type hinting for all function signatures.
-- Prefer pydantic for data validation and asyncio for I/O bound tasks.
-- Include Docstrings in Google Format.
-{
-  "writes": [{"path": "relative/path", "content": "file contents"}],
-  "notes": "short"
-}
-No markdown fences. No extra keys.
-All writes[].path values MUST be repository-relative paths (never absolute).
-'''
+try:
+    from tools.prompts import SYSTEM_JSON_WRITES
+except ModuleNotFoundError:
+    from prompts import SYSTEM_JSON_WRITES  # type: ignore[no-redef]
 
 
 def _read(path: str) -> str:
@@ -85,9 +69,15 @@ def main() -> int:
         prompt = f"DIRECTORY STRUCTURE:\n{tree}\n\n" + prompt + "\n" + "\n".join(ctx)
 
     client = OpenAI(base_url=args.base_url, api_key=args.api_key)
-
+    _agents_md_path = Path(args.repo_root) / "AGENTS.md"
+    _agents_block = (
+        f"\n\n# PROJECT RULES (AGENTS.md — authoritative)\n"
+        f"{_agents_md_path.read_text(encoding='utf-8')}\n"
+        if _agents_md_path.exists()
+        else ""
+    )
     system = (
-        SYSTEM_JSON_WRITES
+        SYSTEM_JSON_WRITES + _agents_block
         if (args.json_writes or args.apply)
         else "Be concise and correct."
     )

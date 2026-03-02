@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import re
 from typing import Any
+from loguru import logger
 
 
 def _extract_fenced_json(text: str) -> str | None:
@@ -86,10 +87,10 @@ def parse_json_object(
         except json.JSONDecodeError:
             continue
         if isinstance(payload, dict):
-            print(f"[parse] stage={stage} status=ok strategy={strategy}")
+            logger.debug(f"[parse] stage={stage} status=ok strategy={strategy}")
             return payload
 
-    print(f"[parse] stage={stage} status=failed")
+    logger.debug(f"[parse] stage={stage} status=failed")
     raise ValueError(f"Could not parse valid JSON object for stage '{stage}'.")
 
 
@@ -107,3 +108,9 @@ def safe_json_from_model(stage: str, raw_text: str) -> dict[str, Any]:
         ValueError: If no valid JSON object is found.
     """
     return parse_json_object(raw_text, stage=stage)
+
+
+SYSTEM_JSON_WRITES = """
+Return ONLY valid JSON. No markdown fences. No prose. No extra keys.
+...
+"""

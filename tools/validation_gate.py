@@ -12,7 +12,28 @@ import subprocess
 from dataclasses import field
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+
+class WriteEntry(BaseModel):
+    path: str
+    content: str
+
+    @field_validator("content")
+    @classmethod
+    def no_triple_double_quotes(cls, v: str) -> str:
+        if '"""' in v:
+            raise ValueError(
+                'content contains forbidden triple-double-quoted docstring ("""). '
+                "Use single-quoted docstrings instead."
+            )
+        return v
+
+
+class WritesPayload(BaseModel):
+    writes: list[WriteEntry]
+    notes: str = ""
+
 
 # ── Data models (Pydantic v2) ────────────────────────────────────────────────
 
