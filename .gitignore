@@ -102,6 +102,13 @@ Layout-Endgoal.txt
 # Ignore a specific file inside a subfolder
 docs/commands.md
 
+# Codex temporary files
+.codex/hisotry.jsonl
+.codex/logs/
+hypercorn.toml
+secret_key
+_recovery/*.patch
+
 
 
 

@@ -1,301 +1,464 @@
-# Implementation Plan — Windows v1
+# Implementation Plan — Traceability + ARP
 
-## Executive Overview
-
-This document defines the complete implementation plan for a Windows-first, plugin-driven controller adapter ecosystem.
-
-The system is built on a microkernel host architecture where all major functionality is delivered through signed plugins, with strict separation between sensing, acting, runtime isolation, and entitlement enforcement.
-
-Platform: Windows only UI: Qt for Python (PySide6 6.9.x) Runtime: Native C++20 plugins + out-of-process Python workers IPC: gRPC (control plane) + shared memory (data plane) Monetization: Tiered entitlements with premium plugin gating
+This plan follows `PRD-PLAN-Transformation-Proposal.md` with deterministic
+Traceability IDs and Atomic Recovery Protocol (ARP) requirements.
 
 ---
 
-# System Architecture
+## Traceability ID Convention
 
-## Architectural Principles
+Every work item must include:
 
-1. Microkernel host with strict plugin boundaries
-2. Deterministic input → mapping → output pipeline
-3. Capability-based hardware exposure
-4. Out-of-process execution for Python runtime
-5. Entitlement enforcement at load boundary
-6. Signed artifact and plugin trust enforcement
+`[DOMAIN-TYPE-NN] -> [PRD-§X.Y]`
 
----
-
-# Agent Structure (5-Agent Model)
-
-## 1. Core Runtime Architect
-
-### Responsibilities
-
-- Define and maintain plugin ABI (C++20 + C boundary)
-- Plugin loader with signature verification
-- Entitlement enforcement at plugin load path
-- Deterministic mapping engine
-- Shared memory frame ring buffer schema
-- Performance instrumentation
-
-### Required Tooling
-
-- C++20 toolchain
-- Authenticode verification
-- ABI compatibility validation
-- Static analysis and profiling tools
-
-### Performance Targets
-
-- Input → Output overhead <5ms typical
-- Plugin load <200ms
-- 100% signature enforcement
-- Zero ABI regressions in CI
+Domain prefixes:
+- `ABI` Plugin ABI / contract boundaries
+- `CAP` Capture system
+- `ENT` Entitlements + premium gating
+- `ENV` Environment management
+- `IPC` gRPC + shared memory
+- `PLT` Platform, auth, CI
+- `RES` Online Resources + CDN
+- `UI` UX shell + panels
+- `WRK` Worker supervisor
 
 ---
 
-## 2. UX & Host Shell (PySide6)
+## Atomic Recovery Protocol (ARP)
 
-### Responsibilities
-
-- Qt shell and plugin-driven panel system
-- Capture configuration UI
-- Mode matrix filtering (FPS + resolution)
-- Premium lock states
-- Worker health HUD
-- Environment manager interface
-- Resource installation flows
-
-### Required Tooling
-
-- PySide6 6.9.x
-- Async orchestration
-- UI integration testing
-- Telemetry instrumentation
-
-### Performance Targets
-
-- No UI blocking >16ms
-- First-run → baseline mapping ≤5 minutes
-- Accurate capture mode filtering
-- Premium plugins non-selectable while locked
+If any validation command exits non-zero:
+1. CAPTURE: `git diff > _recovery/failed_state_<timestamp>.patch`
+2. ANALYZE: `uv run ruff check <failing_file>` and
+   `uv run pytest <failing_test> -vv`
+3. REPORT: "Validation failed because: <reason>. Affected file: <path>."
+4. FIX: one minimal fix attempt
+5. REVERT: if second validation fails, restore and report BLOCKED
 
 ---
 
-## 3. Native I/O & Capture Systems
+## Work Item Template
 
-### Responsibilities
-
-- Capture plugins (OpenCV default)
-- Premium capture backends (locked until entitlement)
-- Capability matrix generation
-- Device enumeration with stable identifiers
-- Input device plugins
-- Virtual controller output integration
-- CPU and GPU render panel plugins
-
-### Required Tooling
-
-- Windows Media Foundation
-- DirectShow (legacy support)
-- OpenCV
-- DXGI / OpenGL interop
-- Windows device APIs
-
-### Performance Targets
-
-- Stable 60 FPS baseline ≥95% sessions
-- Accurate runtime mode matrix
-- FPS deviation <5%
-- Graceful backend fallback ≥99%
+- [ ] `<Title>`
+  `[DOMAIN-TYPE-NN] -> [PRD-§X.Y]`
+  > **Preconditions:** <what must already exist>
+  > **Target Files:** `path/to/file`
+  > **Test File:** `tests/test_file.py`
+  > **Behavior:** <what it does>
+  > **Command:** `uv run ...`
+  > **Validation:** exit 0 required
+  > **Evidence:** `logs/...` or file existence
+  > **ARP Trigger:** if Command exits non-zero, execute ARP before retry
 
 ---
-
-## 4. Runtime Services & Isolation
-
-### Responsibilities
-
-- Python worker supervisor
-- gRPC control plane
-- Shared memory frame transport
-- uv environment lifecycle management
-- Environment bundle installation
-- Artifact verification (SHA-256 + signature)
-- Resource catalog client
-
-### Required Tooling
-
-- uv CLI automation
-- gRPC (Python + C++ bindings)
-- Shared memory primitives
-- Cryptographic validation library
-- Structured logging system
-
-### Performance Targets
-
-- Worker restart <3s
-- Host survivability ≥99.9%
-- Bundle install success ≥95%
-- No unsigned artifact execution
-
----
-
-## 5. Platform & Entitlements
-
-### Responsibilities
-
-- Authentication integration
-- Entitlement state machine
-- Offline grace TTL enforcement
-- Premium gating coordination
-- Admin API services
-- Manifest and artifact distribution
-- CI contract enforcement
-- Release validation automation
-
-### Required Tooling
-
-- OAuth provider SDK
-- JWT validation
-- Cloud-based artifact storage
-- CI/CD with contract validation
-- Automated regression + performance suites
-
-### Performance Targets
-
-- Entitlement refresh <500ms
-- Offline grace accuracy 100%
-- Zero unauthorized premium activation
-- 100% regression suite pass rate before release
-
----
-
-# Milestone Roadmap
 
 ## Phase 0 — Core Architecture & Boundaries
 
-- [ ] Deviation Remediation: Resolve placeholder files for remote-play and GPU renderer
+### Work Items
 
-  > **Target Files:** `src/aetherlink/plugins/capture/_stubs/test_plugin_stubs.py` **Test File:** `tests/test_no_placeholders.py` **Behavior:** Address the feature creep deviation where placeholder files exist but lack concrete implementation for remote-play and GPU visualization. **Validation:** Ensure no missing plugin implementions masquerade as completed logic. **Process:** TDD REQUIRED.
-
-- [ ] Block: Implement remote-play integration with plugin system
-
-  > **Target Files:** `src/aetherlink/core/remote_play.py` **Test File:** `tests/test_remote_play.py` **Behavior:** Fulfills the missing PRD requirement of remote-play integration. **Validation:** Integration tests must verify functionality. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
-
-- [ ] Block: Complete GPU renderer plugin
-
-  > **Target Files:** `src/aetherlink/plugins/capture/gpu_renderer.py` **Test File:** `tests/test_gpu_renderer_plugin.py` **Behavior:** Replaces the GPU renderer placeholder with concrete implementation. **Validation:** Test that the pipeline handles output without crashing. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
-
-- [ ] Block: Add dependency tracking for environment management
-
-  > **Target Files:** `src/aetherlink/core/env_manager.py` **Test File:** `tests/test_dependency_tracking.py` **Behavior:** Tracks dependency count and disk usage for the environment manager. **Validation:** Validates disk usage and package tracking is emitted. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
-
-- [ ] Block: Integrate admin dashboard UI elements
-
-  > **Target Files:** `src/aetherlink/ui/panels/admin_dashboard.py` **Test File:** `tests/test_admin_dashboard.py` **Behavior:** Integrate the entitlement and grace period logic into a concrete UI Admin Dashboard panel. **Validation:** Ensure modal elements launch and show mocked entitlement data. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+- [ ] Resolve placeholder files for remote-play and GPU renderer
+  `[ABI-DEV-01] -> [PRD-§5.4, §5.7]`
+  > **Preconditions:** None
+  > **Target Files:** `src/aetherlink/plugins/capture/_stubs/test_plugin_stubs.py`
+  > **Test File:** `tests/test_no_placeholders.py`
+  > **Behavior:** No placeholder files masquerade as completed logic in `_stubs/`
+  > **Command:** `uv run pytest tests/test_no_placeholders.py -vv`
+  > **Validation:** Exit 0, 0 failures
+  > **Evidence:** Clean `ls src/aetherlink/plugins/capture/_stubs/`
+  > **ARP Trigger:** On failure, capture diff, report violating stubs, revert
 
 - [ ] Freeze plugin ABI
-
-  > **Target File:** `src/aetherlink/plugins/include/plugin_system.hpp` **Test File:** `tests/test_plugin_abi.cpp` **Behavior:** Defines strict C-ABI boundaries for native plugins. Must include structs for PluginIdentity, Capabilities, and Lifecycle hooks. **Validation:** File must exist, compile (if tested against dummy C++ file), and not rely on Python objects. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+  `[ABI-FRZ-01] -> [PRD-§5.1.2, §4.4]`
+  > **Preconditions:** None
+  > **Target File:** `src/aetherlink/plugins/include/plugin_system.hpp`
+  > **Test File:** `tests/test_plugin_abi.cpp`
+  > **Behavior:** Strict C-ABI boundaries and lifecycle contracts
+  > **Command:** `g++ -std=c++20 -c tests/test_plugin_abi.cpp -I src/aetherlink/plugins/include/`
+  > **Validation:** Exit 0
+  > **Evidence:** `docs/breaking-changes/abi.md` entry created
+  > **ARP Trigger:** On compile failure, report exact compiler error first
 
 - [ ] Freeze gRPC proto
-
-  > **Target File:** `src/aetherlink/proto/capture.proto` **Test File:** `tests/test_capture_proto.py` **Output Files:** `src/aetherlink/proto/capture_pb2.py`, `src/aetherlink/proto/capture_pb2_grpc.py` **Behavior:** Defines gRPC services for worker control. Separates control plane messages from data payloads. **Validation:** `uv run python -m grpc_tools.protoc` completes successfully and produces the output Python files. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+  `[IPC-FRZ-01] -> [PRD-§5.9, §4.4]`
+  > **Preconditions:** `[ABI-FRZ-01]` complete
+  > **Target File:** `src/aetherlink/proto/capture.proto`
+  > **Output Files:** `src/aetherlink/proto/capture_pb2.py`, `capture_pb2_grpc.py`
+  > **Test File:** `tests/test_capture_proto.py`
+  > **Behavior:** Control-plane gRPC services for worker management
+  > **Command:** `uv run python -m grpc_tools.protoc -I src/aetherlink/proto/ --python_out=src/aetherlink/proto/ --grpc_python_out=src/aetherlink/proto/ src/aetherlink/proto/capture.proto && uv run pytest tests/test_capture_proto.py -vv`
+  > **Validation:** Exit 0, files generated, tests pass
+  > **Evidence:** `src/aetherlink/proto/capture_pb2.py` exists; proto change log entry
+  > **ARP Trigger:** Report exact protoc/pytest failure before fix
 
 - [ ] Define shared memory layout contract
+  `[IPC-SHM-01] -> [PRD-§5.9, §4.4]`
+  > **Preconditions:** `[IPC-FRZ-01]` complete
+  > **Target File:** `src/aetherlink/core/shared_memory_layout.py`
+  > **Test File:** `tests/test_shared_memory_layout.py`
+  > **Behavior:** Deterministic ring buffer layout
+  > **Command:** `uv run pytest tests/test_shared_memory_layout.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** `docs/breaking-changes/shmem.md` entry created
+  > **ARP Trigger:** Report failing offset assertion before fix
 
-  > **Target File:** `src/aetherlink/core/shared_memory_layout.py` **Test File:** `tests/test_shared_memory_layout.py` **Behavior:** Deterministic ring buffer layout defined and validated in Python. **Validation:** `uv run pytest tests/test_shared_memory_layout.py` must pass with 0 errors. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+- [ ] Implement remote-play integration stub
+  `[CAP-RMP-01] -> [PRD-§5.7]`
+  > **Preconditions:** `[ABI-FRZ-01]` complete
+  > **Target Files:** `src/aetherlink/core/remote_play.py`
+  > **Test File:** `tests/test_remote_play.py`
+  > **Behavior:** Importable module with defined interfaces
+  > **Command:** `uv run pytest tests/test_remote_play.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** `uv run python -c "import aetherlink.core.remote_play"` exits 0
+  > **ARP Trigger:** Report ImportError dependency before fix
+
+- [ ] Complete GPU renderer plugin
+  `[UI-GPU-01] -> [PRD-§5.5]`
+  > **Preconditions:** `[ABI-FRZ-01]` complete
+  > **Target Files:** `src/aetherlink/plugins/capture/gpu_renderer.py`
+  > **Test File:** `tests/test_gpu_renderer_plugin.py`
+  > **Behavior:** Replace placeholder, no pipeline crash
+  > **Command:** `uv run pytest tests/test_gpu_renderer_plugin.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** No `_stub` markers remain
+  > **ARP Trigger:** Capture traceback before fix attempt
+
+- [ ] Add dependency tracking for environment management
+  `[ENV-DEP-01] -> [PRD-§5.10.1]`
+  > **Preconditions:** None
+  > **Target Files:** `src/aetherlink/core/env_manager.py`
+  > **Test File:** `tests/test_dependency_tracking.py`
+  > **Behavior:** Emit structured dependency count and disk usage
+  > **Command:** `uv run pytest tests/test_dependency_tracking.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** Dict contains `dep_count` and `disk_bytes`
+  > **ARP Trigger:** Report missing/wrong field before fix
+
+- [ ] Integrate admin dashboard UI elements
+  `[UI-ADM-01] -> [PRD-§5.12]`
+  > **Preconditions:** `[ENT-VAL-01]` in Phase 4 reviewed
+  > **Target Files:** `src/aetherlink/ui/panels/admin_dashboard.py`
+  > **Test File:** `tests/test_admin_dashboard.py`
+  > **Behavior:** Modal launches with mocked entitlement data
+  > **Command:** `uv run pytest tests/test_admin_dashboard.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** Widget instantiation assertions pass
+  > **ARP Trigger:** Capture Qt stderr before fix
+
+### Phase 0 Exit Criteria
+`[PLT-EXIT-00] -> [PRD-§4]`
+
+```bash
+uv run pytest tests/test_no_placeholders.py
+g++ -std=c++20 -c tests/test_plugin_abi.cpp -I src/aetherlink/plugins/include/
+uv run pytest tests/test_capture_proto.py
+uv run pytest tests/test_shared_memory_layout.py
+uv run ruff check . && uv run pytest tests/ -x
+```
 
 ---
 
 ## Phase 1 — UI Shell & Core Framework
 
-- [ ] Deviation Remediation: Sweep and isolate plugin placeholders
-
-  > **Target Files:** `src/aetherlink/plugins/capture/_stubs/*` **Behavior:** Audit the plugin stubs path to either fully implement or remove dummy files so they do not masquerade as completed logic. **Validation:** `ls src/aetherlink/plugins/capture/_stubs/` must contain no untracked dangling logic schemas. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
-
-- [ ] Deviation Remediation: Isolate or Sequence Offline Grace logic
-
-  > **Target Files:** `src/aetherlink/core/grace_period.py` **Test File:** `tests/test_grace_period.py` **Behavior:** Formalize the partially implemented offline grace logic or revert it until Phase 4 prerequisites are met. **Validation:** `uv run pytest tests/test_grace_period.py` must reliably test the expiry TTL of the entitlement object. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
-
-- [ ] Block: Implement remote-play integrations
-
-  > **Target Files:** `src/aetherlink/core/remote_play.py` **Test File:** `tests/test_remote_play.py` **Behavior:** Python module linking remote-play integrations to the core pipeline. **Validation:** `uv run pytest tests/test_remote_play.py` ensures the module is importable and interfaces are defined. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
-
-- [ ] Block: Complete scripting and inference engine plugins
-
-  > **Target Files:** `src/aetherlink/plugins/inference_engine.py` **Test File:** `tests/test_inference_engine.py` **Behavior:** Implements the scripting and ML inference plugin abstractions. **Validation:** `uv run pytest tests/test_inference_engine.py` verifies plugin registration behavior. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
-
-- [ ] Block: Optimize GPU rendering support
-
-  > **Target Files:** `src/aetherlink/plugins/capture/gpu_renderer.py` **Test File:** `tests/test_gpu_renderer.py` **Behavior:** Replaces the GPU renderer stub with a functional implementation. **Validation:** `uv run pytest tests/test_gpu_renderer.py` ensures the rendering pipeline does not crash under test loads. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
-
-- [ ] Block: Test and validate all subsystem interactions
-
-  > **Target Files:** `tests/integration/test_subsystems.py` **Test File:** `tests/integration/test_subsystems.py` **Behavior:** End-to-end integration tests spanning capture, input, and outputs. **Validation:** `uv run pytest tests/integration/test_subsystems.py` passing with 0 errors. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+### Work Items
 
 - [ ] Deliver basic PySide6 Qt shell
+  `[UI-SHL-01] -> [PRD-§6]`
+  > **Preconditions:** Phase 0 exit criteria passed
+  > **Target Files:** `src/aetherlink/main.py`, `src/aetherlink/ui/main_window.py`
+  > **Test File:** `tests/test_ui_shell.py`
+  > **Behavior:** `QApplication` and `MainWindow` initialize cleanly
+  > **Command:** `uv run pytest tests/test_ui_shell.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** `uv run python -c "from aetherlink.ui.main_window import MainWindow"` exits 0
+  > **ARP Trigger:** Report missing Qt bindings before fix
 
-  > **Target Files:** `src/aetherlink/main.py`, `src/aetherlink/ui/main_window.py` **Test File:** `tests/test_ui_shell.py` **Behavior:** `aetherlink/main.py` properly initializes `QApplication` and creates an instance of `MainWindow`. Uses proper PySide6 imports and `app.exec()`. **Validation:** `uv run pytest tests/test_ui_shell.py` must mock the exec loop and assert `QApplication` initialization does not crash, and `MainWindow` can be instantiated. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+- [ ] Sweep and isolate plugin placeholders
+  `[ABI-DEV-02] -> [PRD-§5.1]`
+  > **Preconditions:** `[ABI-DEV-01]` complete
+  > **Target Files:** `src/aetherlink/plugins/capture/_stubs/*`
+  > **Behavior:** Stubs implemented or removed; no dangling schemas
+  > **Command:** `uv run pytest tests/test_no_placeholders.py -vv`
+  > **Validation:** Exit 0; stubs directory empty/absent
+  > **Evidence:** `ls src/aetherlink/plugins/capture/_stubs/` empty
+  > **ARP Trigger:** List remaining files and reason before fix
 
-- [ ] Implement baseline input and output plugins contract
+- [ ] Isolate or sequence offline grace logic
+  `[ENT-GRC-01] -> [PRD-§7]`
+  > **Preconditions:** Phase 0 complete
+  > **Target Files:** `src/aetherlink/core/grace_period.py`
+  > **Test File:** `tests/test_grace_period.py`
+  > **Behavior:** Formal TTL expiry behavior or explicit sequencing to Phase 4
+  > **Command:** `uv run pytest tests/test_grace_period.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** `entitlement.locked == True` after TTL expiry
+  > **ARP Trigger:** Report actual vs expected expiry time
 
-  > **Target Files (Python):** `src/aetherlink/input/xinput.py`, `src/aetherlink/output/vigem.py` **Target Files (Native):** `host/plugins/xinput_provider.cpp`, `host/plugins/vigem_output.cpp` **Test File:** `tests/test_io_plugins.py` **Behavior:** Python files must define abstract interfaces for reading/writing controller state. Native files must provide C++ stub implementations exporting the `Initialize` and `GetCapabilities` functions defined in `plugin_system.hpp`. **Validation:** Python interfaces must be importable (`python -c "import aetherlink.input.xinput"`). **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+- [ ] Implement remote-play integrations
+  `[CAP-RMP-02] -> [PRD-§5.7]`
+  > **Preconditions:** `[CAP-RMP-01]` complete
+  > **Target Files:** `src/aetherlink/core/remote_play.py`
+  > **Test File:** `tests/test_remote_play.py`
+  > **Behavior:** Concrete interfaces linked into core pipeline
+  > **Command:** `uv run pytest tests/test_remote_play.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** Module importable without errors
+  > **ARP Trigger:** Report missing interface method before fix
+
+- [ ] Complete scripting and inference engine plugins
+  `[WRK-INF-01] -> [PRD-§5.8]`
+  > **Preconditions:** `[ABI-FRZ-01]` complete
+  > **Target Files:** `src/aetherlink/plugins/inference_engine.py`
+  > **Test File:** `tests/test_inference_engine.py`
+  > **Behavior:** Plugin abstraction + registration behavior
+  > **Command:** `uv run pytest tests/test_inference_engine.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** No `PluginLoadError` on registration
+  > **ARP Trigger:** Report missing contract method
+
+- [ ] Implement baseline input and output plugin contracts
+  `[ABI-IO-01] -> [PRD-§5.2, §5.6]`
+  > **Preconditions:** `[ABI-FRZ-01]` complete
+  > **Target Files (Python):** `src/aetherlink/input/xinput.py`,
+  > `src/aetherlink/output/vigem.py`
+  > **Target Files (Native):** `host/plugins/xinput_provider.cpp`,
+  > `host/plugins/vigem_output.cpp`
+  > **Test File:** `tests/test_io_plugins.py`
+  > **Behavior:** IO interfaces and native ABI exports
+  > **Command:** `uv run python -c "import aetherlink.input.xinput; import aetherlink.output.vigem" && uv run pytest tests/test_io_plugins.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** both Python interfaces importable
+  > **ARP Trigger:** Report module path failure before fix
+
+- [ ] Test and validate subsystem interactions (split)
+  `[ABI-INT-01] -> [PRD-§5.2, §5.4, §5.9]`
+  > **Behavior:** Split into capture/worker, IO pipeline, entitlement/loader tests
+
+  - [ ] Capture <-> Worker integration test
+    `[CAP-INT-01] -> [PRD-§5.4, §5.9]`
+    > **Command:** `uv run pytest tests/integration/test_capture_worker.py -vv`
+    > **Evidence:** frame handoff assertion passes
+
+  - [ ] Input <-> Output pipeline integration test
+    `[ABI-INT-02] -> [PRD-§5.2]`
+    > **Command:** `uv run pytest tests/integration/test_io_pipeline.py -vv`
+    > **Evidence:** latency <= 5ms assertion
+
+  - [ ] Entitlement <-> Plugin loader integration test
+    `[ENT-INT-01] -> [PRD-§5.1.3, §7]`
+    > **Command:** `uv run pytest tests/integration/test_entitlement_loader.py -vv`
+    > **Evidence:** blocked load logged with no entitlement
+
+### Phase 1 Exit Criteria
+`[PLT-EXIT-01] -> [PRD-§4]`
+
+```bash
+uv run pytest tests/test_ui_shell.py
+uv run pytest tests/test_no_placeholders.py
+uv run python -c "import aetherlink.input.xinput; import aetherlink.output.vigem"
+uv run ruff check . && uv run pytest tests/ -x
+```
 
 ---
 
 ## Phase 2 — Capture + Worker Integration
 
-- [ ] Deliver OpenCV capture plugin contract
+### Work Items
 
-  > **Target File (Python):** `src/aetherlink/vision/cv_capture.py` **Target File (Native):** `host/plugins/cv_capture.cpp` **Test File:** `tests/test_cv_capture.py` **Behavior:** Python module outlines interaction with the native CV capture plugin. Native plugin must stub frame capture logic and shared memory mapping. **Validation:** Python integration test must be written to verify module import and method signatures. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+- [ ] Deliver OpenCV capture plugin contract
+  `[CAP-OCV-01] -> [PRD-§5.4.1]`
+  > **Preconditions:** `[IPC-SHM-01]`, `[ABI-FRZ-01]` complete
+  > **Target File (Python):** `src/aetherlink/vision/cv_capture.py`
+  > **Target File (Native):** `host/plugins/cv_capture.cpp`
+  > **Test File:** `tests/test_cv_capture.py`
+  > **Behavior:** Native/Python capture contract + shared memory mapping
+  > **Command:** `uv run pytest tests/test_cv_capture.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** `get_mode_matrix()` typed list return
+  > **ARP Trigger:** Report signature mismatch details
 
 - [ ] Implement capability matrix filtering contract
-
-  > **Target Files:** `host/capability_matrix_filtering.cpp`, `include/capability_matrix_filtering.h` **Test File:** `tests/test_capability_matrix.cpp` **Behavior:** Host parsing logic to reject plugin capabilities that do not match the expected schema. **Validation:** Must compile alongside the host application. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+  `[CAP-MAT-01] -> [PRD-§5.4.2]`
+  > **Preconditions:** `[CAP-OCV-01]` complete
+  > **Target Files:** `host/capability_matrix_filtering.cpp`,
+  > `include/capability_matrix_filtering.h`
+  > **Test File:** `tests/test_capability_matrix.cpp`
+  > **Behavior:** Reject invalid capability schemas
+  > **Command:** `g++ -std=c++20 tests/test_capability_matrix.cpp -I include/ && ./a.out`
+  > **Validation:** Exit 0
+  > **Evidence:** compile clean + assertions pass
+  > **ARP Trigger:** Report exact g++ error before fix
 
 - [ ] Implement worker supervisor + IPC
-
-  > **Target Files:** `host/worker_supervisor.cpp`, `src/aetherlink/core/supervisor.py` **Test File:** `tests/test_supervisor.py` **Behavior:** Logic to start, monitor (heartbeat), and cleanly stop a Python worker process via subprocess injection and gRPC. **Validation:** Pytest `tests/test_supervisor.py` demonstrating process spawn and termination. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+  `[WRK-SUP-01] -> [PRD-§5.9]`
+  > **Preconditions:** `[IPC-FRZ-01]`, `[IPC-SHM-01]` complete
+  > **Target Files:** `host/worker_supervisor.cpp`, `src/aetherlink/core/supervisor.py`
+  > **Test File:** `tests/test_supervisor.py`
+  > **Behavior:** Spawn, heartbeat, restart with backoff (< 3s)
+  > **Command:** `uv run pytest tests/test_supervisor.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** restart completed within threshold
+  > **ARP Trigger:** Report subprocess state on heartbeat timeout
 
 - [ ] Add performance HUD panel
+  `[UI-HUD-01] -> [PRD-§6]`
+  > **Preconditions:** `[UI-SHL-01]` complete
+  > **Target File:** `src/aetherlink/ui/panels/performance_hud.py`
+  > **Test File:** `tests/test_performance_hud.py`
+  > **Behavior:** Real-time FPS, latency, and resource metrics
+  > **Command:** `uv run pytest tests/test_performance_hud.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** widget render and default assertions pass
+  > **ARP Trigger:** Report Qt error on instantiation failure
 
-  > **Target File:** `src/aetherlink/ui/panels/performance_hud.py` **Test File:** `tests/test_performance_hud.py` **Behavior:** PySide6 widget rendering real-time FPS, latency, and resource metrics. **Validation:** Unit test verifying widget instantiation and default text values. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+### Phase 2 Exit Criteria
+`[PLT-EXIT-02] -> [PRD-§4]`
+
+```bash
+uv run pytest tests/test_cv_capture.py
+g++ -std=c++20 tests/test_capability_matrix.cpp -I include/ && ./a.out
+uv run pytest tests/test_supervisor.py
+uv run ruff check . && uv run pytest tests/ -x
+```
 
 ---
 
 ## Phase 3 — Environment + Resource System
 
-- [ ] Implement uv environment management contract
+### Work Items
 
-  > **Target File:** `src/aetherlink/core/env_manager.py` **Test File:** `tests/test_env_manager.py` **Behavior:** Programmatically creates isolated `.venv` directories utilizing `uv` underneath. **Validation:** Pytest script that mocks a `subprocess.run` call to verify `uv venv` bounds are commanded correctly. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+- [ ] Implement uv environment management contract
+  `[ENV-MGR-01] -> [PRD-§5.10.1]`
+  > **Preconditions:** `[ENV-DEP-01]` complete
+  > **Target File:** `src/aetherlink/core/env_manager.py`
+  > **Test File:** `tests/test_env_manager.py`
+  > **Behavior:** Isolated `uv` environment lifecycle metadata
+  > **Command:** `uv run pytest tests/test_env_manager.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** mocked `uv venv` invocation matches expected args
+  > **ARP Trigger:** Report actual call args before fix
 
 - [ ] Deliver environment bundle installer contract
-
-  > **Target File:** `src/aetherlink/core/bundle_installer.py` **Test File:** `tests/test_bundle_installer.py` **Behavior:** Extracts a zipped resource bundle and verifies a mock `manifest.json`. **Validation:** Pytest using `tempfile` and `zipfile` to simulate extraction and verify paths. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+  `[ENV-BUN-01] -> [PRD-§5.10.2]`
+  > **Preconditions:** `[ENV-MGR-01]` complete
+  > **Target File:** `src/aetherlink/core/bundle_installer.py`
+  > **Test File:** `tests/test_bundle_installer.py`
+  > **Behavior:** Extract, verify manifest, stream logs, support variants
+  > **Command:** `uv run pytest tests/test_bundle_installer.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** manifest fields validated in tests
+  > **ARP Trigger:** Report missing manifest field
 
 - [ ] Implement signed artifact verification contract
-
-  > **Target Files:** `host/artifact_verifier.cpp`, `src/aetherlink/core/security.py` **Test File:** `tests/test_security.py` **Behavior:** Enforces SHA-256 and signature checks. **Validation:** Unit tests for Python security logic simulating both valid and mismatch hashes. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+  `[RES-SIG-01] -> [PRD-§5.11.2]`
+  > **Preconditions:** Phase 0 complete
+  > **Target Files:** `host/artifact_verifier.cpp`, `src/aetherlink/core/security.py`
+  > **Test File:** `tests/test_security.py`
+  > **Behavior:** SHA-256 + signature enforcement
+  > **Command:** `uv run pytest tests/test_security.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** valid and invalid paths asserted
+  > **ARP Trigger:** Report actual exception vs expected
 
 - [ ] Add resource browsing UI panel
+  `[UI-RES-01] -> [PRD-§5.11, §6]`
+  > **Preconditions:** `[RES-SIG-01]`, `[UI-SHL-01]` complete
+  > **Target File:** `src/aetherlink/ui/panels/online_resources.py`
+  > **Test File:** `tests/test_online_resources.py`
+  > **Behavior:** Catalog modal with one-click install and streamed logs
+  > **Command:** `uv run pytest tests/test_online_resources.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** rendered item count matches catalog mock
+  > **ARP Trigger:** Capture Qt render error before fix
 
-  > **Target File:** `src/aetherlink/ui/panels/online_resources.py` **Test File:** `tests/test_online_resources.py` **Behavior:** PySide6 modal bridging catalog metadata into a visual list. **Validation:** Pytest assessing UI logic with mock JSON responses. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+### Phase 3 Exit Criteria
+`[PLT-EXIT-03] -> [PRD-§4]`
+
+```bash
+uv run pytest tests/test_env_manager.py
+uv run pytest tests/test_bundle_installer.py
+uv run pytest tests/test_security.py
+uv run ruff check . && uv run pytest tests/ -x
+```
 
 ---
 
 ## Phase 4 — Entitlements + Admin
 
-- [ ] Implement entitlement validation contract
+### Work Items
 
-  > **Target File:** `src/aetherlink/core/entitlements.py` **Target File (Native):** `host/entitlement_check.cpp` **Test File:** `tests/test_entitlement_check.py` **Behavior:** Validates JWT/Local Cache for Tier assignments. **Validation:** Tests utilizing a mocked JWT payload. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+- [ ] Implement entitlement validation contract
+  `[ENT-VAL-01] -> [PRD-§7, §5.1.3]`
+  > **Preconditions:** Phase 3 complete
+  > **Target File:** `src/aetherlink/core/entitlements.py`
+  > **Target File (Native):** `host/entitlement_check.cpp`
+  > **Test File:** `tests/test_entitlement_check.py`
+  > **Behavior:** JWT/cache checks + offline grace transitions
+  > **Command:** `uv run pytest tests/test_entitlement_check.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** all state transitions logged
+  > **ARP Trigger:** Report actual vs expected state transition
 
 - [ ] Implement premium plugin gating contract
-
-  > **Target Files (Native):** Updates to `host/plugin_loader.cpp` **Test File:** `tests/test_plugin_loader.cpp` **Behavior:** Refuses to map premium DLLs into memory without entitlement. **Validation:** Test verifying a premium DLL fails to load without a token and routes to a simulated purchase flow. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+  `[ENT-GAT-01] -> [PRD-§5.1.3]`
+  > **Preconditions:** `[ENT-VAL-01]`, `[ABI-FRZ-01]` complete
+  > **Target Files (Native):** `host/plugin_loader.cpp`
+  > **Test File:** `tests/test_plugin_loader.cpp`
+  > **Behavior:** Block premium DLL mapping without entitlement
+  > **Command:** `g++ -std=c++20 tests/test_plugin_loader.cpp && ./a.out`
+  > **Validation:** Exit 0
+  > **Evidence:** blocked-load log emitted
+  > **ARP Trigger:** Report which gate was bypassed on failure
 
 - [ ] Deliver admin APIs contract
-
-  > **Target File:** `src/aetherlink/core/admin_api.py` **Test File:** `tests/test_admin_api.py` **Behavior:** Exposes mock REST/RPC endpoints for remote diagnostics. **Validation:** Test invoking defined endpoints to assert standardized JSON returns. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+  `[PLT-ADM-01] -> [PRD-§5.12]`
+  > **Preconditions:** `[ENT-VAL-01]` complete
+  > **Target File:** `src/aetherlink/core/admin_api.py`
+  > **Test File:** `tests/test_admin_api.py`
+  > **Behavior:** User management, entitlement assignment, revocation, audit
+  > **Command:** `uv run pytest tests/test_admin_api.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** endpoint response schemas match
+  > **ARP Trigger:** Report schema key mismatch details
 
 - [ ] Implement offline grace logic contract
+  `[ENT-GRC-02] -> [PRD-§7]`
+  > **Preconditions:** `[ENT-VAL-01]`, `[ENT-GRC-01]` complete
+  > **Target File:** `src/aetherlink/core/grace_period.py`
+  > **Test File:** `tests/test_grace_period_logic.py`
+  > **Behavior:** TTL cache with premium lock on expiry
+  > **Command:** `uv run pytest tests/test_grace_period_logic.py -vv`
+  > **Validation:** Exit 0
+  > **Evidence:** lock asserted after simulated expiry
+  > **ARP Trigger:** Report expected vs actual expiry timestamp
 
-  > **Target File:** `src/aetherlink/core/grace_period.py` **Test File:** `tests/test_grace_period_logic.py` **Behavior:** Caches state with TTL. Upon expiry, premium features lock. **Validation:** Time-travel unit test proving TTL expiry drops entitlement correctly. **Process:** TDD REQUIRED. You MUST write the test first, execute it to prove it fails, write the implementation code, and execute it again to prove it passes.
+### Phase 4 Exit Criteria
+`[PLT-EXIT-04] -> [PRD-§4, §7]`
+
+```bash
+uv run pytest tests/test_entitlement_check.py
+g++ -std=c++20 tests/test_plugin_loader.cpp && ./a.out
+uv run pytest tests/test_grace_period_logic.py
+uv run ruff check . && uv run pytest tests/ --tb=short
+```
+
+---
+
+## Traceability Index
+
+| PRD Section | Traceability IDs |
+| --- | --- |
+| §4 (Architectural Principles) | `ABI-FRZ-01`, `IPC-FRZ-01`, `IPC-SHM-01`, `PLT-BND-01`, `PLT-EXIT-*` |
+| §5.1 (Plugin System) | `ABI-FRZ-01`, `ABI-DEV-01/02`, `ABI-IO-01`, `ENT-GAT-01` |
+| §5.2 (Controller Adapter) | `ABI-IO-01`, `ABI-INT-02` |
+| §5.4 (Capture System) | `CAP-OCV-01`, `CAP-MAT-01`, `CAP-RMP-01/02`, `UI-GPU-01`, `CAP-INT-01` |
+| §5.5 (Display/Render) | `UI-GPU-01` |
+| §5.6 (Input Devices) | `ABI-IO-01` |
+| §5.7 (Remote-Play) | `CAP-RMP-01/02` |
+| §5.8 (Scripting/Inference) | `WRK-INF-01` |
+| §5.9 (Python Workers) | `IPC-FRZ-01`, `IPC-SHM-01`, `WRK-SUP-01`, `WRK-TAR-01` |
+| §5.10 (uv Environments) | `ENV-DEP-01`, `ENV-MGR-01`, `ENV-BUN-01`, `ENV-TAR-01` |
+| §5.11 (Online Resources) | `RES-SIG-01`, `UI-RES-01` |
+| §5.12 (Admin Dashboard) | `UI-ADM-01`, `PLT-ADM-01` |
+| §6 (UX Requirements) | `UI-SHL-01`, `UI-HUD-01`, `UI-RES-01`, `UI-PER-01` |
+| §7 (Entitlements) | `ENT-VAL-01`, `ENT-GAT-01`, `ENT-GRC-01/02`, `ENT-TAR-01`, `ENT-INT-01` |
+| §9 (Success Metrics) | `PLT-MET-01` |

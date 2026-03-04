@@ -16,6 +16,40 @@ Aetherlink is a high-performance controller adapter ecosystem for gaming. It pro
 
 This revision adds specific plugin-driven capability requirements derived from the provided plugin feature overview (display/capture backends, input device support, remote-play integrations, 1000 Hz scripting VM characteristics, and an online resources system that can distribute single-file environment bundles and protected model packages). fileciteturn4file0
 
+## G3 Framework — Cognitive Anchor
+
+### Guidelines (Project Context + Intent)
+- **Core thesis:** Microkernel host where everything is a plugin. No exceptions.
+- **Platform:** Windows only (v1). No cross-platform abstractions.
+- **Tech stack:** C++20 (native plugins), Python 3.12 (workers + UI), PySide6 6.9.x
+  (shell).
+- **IPC:** gRPC control plane + shared memory data plane. No alternatives.
+- **Monetization:** Tiered entitlements. Premium plugins ship locked, not absent.
+- **Priority order when requirements conflict:**
+  Host Stability > Security/Signing > Feature Completeness > Performance > UX Polish
+
+### Guidance (Interpretive Logic)
+- When a PRD section is ambiguous, default to the most restrictive interpretation.
+- "Contract" items (ABI, proto, shared memory layout) are frozen after Phase 0.
+  Any agent that modifies a frozen contract MUST log a breaking-change entry.
+- TDD is not optional. Tests are written first, executed to prove failure,
+  then implementation is written, then tests are re-executed to prove passage.
+- File paths in PLAN are canonical. Do not rename or relocate without a
+  traceability update.
+
+### Guardrails (Hard Boundaries + Automated Gates)
+- NEVER load a premium plugin DLL without a valid entitlement token.
+- NEVER execute an unsigned artifact.
+- NEVER modify `plugin_system.hpp` without a breaking-change log entry.
+- NEVER bypass gRPC for worker-to-host communication.
+- NEVER write to `src/plugins/*` — use `src/aetherlink/plugins/*`.
+- ASK FIRST: changes to `capture.proto`, `shared_memory_layout.py`,
+  billing/entitlement state machine semantics, auth provider selection.
+- ALWAYS run `uv run ruff check && uv run pytest` before marking an item done.
+- ALWAYS use Loguru for logging — no print statements.
+- ALWAYS use Google-format docstrings on all public Python functions.
+- ALWAYS include type hints on all Python function signatures.
+
 ---
 
 ## 2) Goals and Non-Goals
@@ -39,12 +73,14 @@ This revision adds specific plugin-driven capability requirements derived from t
 
 ---
 
-## 3) Personas
+## 3) Role-Based Behavioral Models
 
-- **Power gamer:** wants stable mappings, quick switching, minimal latency.
-- **Vision/ML tinkerer:** wants reproducible envs, fast installs, capture + inference throughput.
-- **Accessibility modder:** wants deterministic automation primitives and calibration tooling.
-- **Admin/operator:** wants user provisioning and entitlements control.
+| Role | Access Scope | Entitlement Level | Key Behaviors |
+| --- | --- | --- | --- |
+| **Power Gamer** | Profile CRUD, mapping, fast-switch | Free/Pro | No admin, no billing, no env management |
+| **Vision/ML Tinkerer** | Env create/delete, resource install, capture config | Pro/Vision | No billing admin, no user management |
+| **Accessibility Modder** | Scripting VM, calibration tooling, automation primitives | Pro | No capture premium features unless entitled |
+| **Admin/Operator** | Full entitlement + user management, audit log | Enterprise | Can revoke sessions, assign tiers, view all logs |
 
 ---
 
@@ -70,6 +106,49 @@ Everything else ships as plugins.
 
 - Primary IO loop must remain low-latency.
 - Inference and heavy CV run off the main dispatch path with bounded queues/backpressure.
+
+### 4.4 Frozen Contracts — DO NOT CHANGE
+
+The following are frozen after Phase 0 completion. No agent may modify these
+without an explicit breaking-change log entry and human sign-off:
+
+| File | Frozen After | Breaking Change Log Path |
+| --- | --- | --- |
+| `src/aetherlink/plugins/include/plugin_system.hpp` | Phase 0 | `docs/breaking-changes/abi.md` |
+| `src/aetherlink/proto/capture.proto` | Phase 0 | `docs/breaking-changes/proto.md` |
+| `src/aetherlink/core/shared_memory_layout.py` | Phase 0 | `docs/breaking-changes/shmem.md` |
+| `src/aetherlink/core/entitlements.py` (state machine) | Phase 4 | `docs/breaking-changes/entitlements.md` |
+
+Agents that detect a required change to a frozen file MUST:
+1. Stop execution.
+2. Report: "FROZEN CONTRACT MODIFICATION REQUIRED: <file> — <reason>."
+3. Await human instruction before proceeding.
+
+### 4.5 Agent Boundary Rules
+
+**NEVER:**
+- Load premium plugin DLLs without a valid entitlement token
+- Execute unsigned artifacts (plugins, environment bundles, model packages)
+- Write to `src/plugins/*` (use `src/aetherlink/plugins/*`)
+- Bypass the gRPC control plane for worker-to-host communication
+- Commit secrets, API keys, or tokens
+- Use `print()` — use `loguru.logger` instead
+
+**ASK FIRST:**
+- Any modification to a frozen contract (see 4.4)
+- Changes to entitlement state machine semantics
+- Auth provider selection or changes
+- Database schema changes
+- Billing or pricing logic changes
+- Remote-play v1 vs v1.1 scoping decisions
+
+**ALWAYS:**
+- Run `uv run ruff check && uv run pytest` before marking a work item done
+- Write tests first (TDD) — prove failure before writing implementation
+- Use Google-format docstrings on all public Python functions
+- Use type hints on all Python function signatures
+- Log breaking-change entries before modifying frozen contracts
+- Document new gRPC endpoints in `docs/proto/`
 
 ---
 
@@ -124,6 +203,45 @@ Each plugin must expose:
 
 - User may load additional plugin DLLs at runtime from an approved directory if signed and policy-allowed.
 - If a selected DLL is **Premium** and the user is not entitled, the host must block loading and route the user to the purchase flow.
+
+### 5.1.5 Critical State Machines (TAR Format)
+
+#### Entitlement / Premium Plugin Gating
+`[ENT-TAR-01] -> [PRD-§5.1.3, §7]`
+
+| Trigger | Condition | Action | Result State |
+| --- | --- | --- | --- |
+| `Host::LoadPlugin(plugin_id)` called | Plugin is NOT premium | Load normally | `LOADED` |
+| `Host::LoadPlugin(plugin_id)` called | Plugin is premium, entitlement valid | Load plugin | `LOADED` |
+| `Host::LoadPlugin(plugin_id)` called | Plugin is premium, entitlement invalid | Block load, show purchase CTA | `LOCKED` |
+| Purchase completed | Entitlement token received | Refresh entitlement cache | `ELIGIBLE` |
+| Entitlement refresh | Token valid | Enable plugin without reinstall | `LOADED` |
+| TTL expires (offline) | Grace period active | Warn user, maintain access | `GRACE` |
+| TTL expires (offline) | Grace period expired | Lock premium features | `LOCKED` |
+
+#### Python Worker Lifecycle
+`[WRK-TAR-01] -> [PRD-§5.9]`
+
+| Trigger | Condition | Action | Result State |
+| --- | --- | --- | --- |
+| Worker start requested | Env valid, supervisor running | Spawn subprocess, start heartbeat | `STARTING` |
+| Heartbeat received | Within timeout | Update health state | `RUNNING` |
+| Heartbeat missed | Within retry window | Increment miss counter | `DEGRADED` |
+| Heartbeat missed | Retry window exceeded | Kill + restart with backoff | `RECOVERING` |
+| Worker crash detected | Any | Log crash, trigger restart | `RECOVERING` |
+| Restart succeeds | — | Resume heartbeat monitoring | `RUNNING` |
+| Restart fails 3x | — | Mark worker FAILED, alert UI | `FAILED` |
+
+#### Environment Bundle Install
+`[ENV-TAR-01] -> [PRD-§5.10.2]`
+
+| Trigger | Condition | Action | Result State |
+| --- | --- | --- | --- |
+| Install initiated | SHA-256 valid, signature valid | Extract bundle, stream logs | `INSTALLING` |
+| Install initiated | SHA-256 mismatch | Reject, show error | `FAILED` |
+| `uv sync` completes | Exit 0 | Validate imports | `VERIFYING` |
+| Validation passes | All imports resolve | Mark env ready | `READY` |
+| Validation fails | Import error | Show failed deps, offer repair | `FAILED` |
 
 ---
 
@@ -406,12 +524,16 @@ Auth provider remains undecided globally, but the Online Resources system must s
 
 ---
 
-## 9) Success Metrics
+## 9) Success Metrics (Machine-Verifiable)
 
-- Median time install → working baseline mapping: ≤ 5 minutes
-- Environment bundle install success rate: ≥ 95%
-- Host survivability on worker crash: ≥ 99.9% (host remains running)
-- Capture stability at 60 FPS baseline on supported rigs: ≥ 95% sessions without sustained drops
+| Metric | Target | Verification Method | Evidence Artifact |
+| --- | --- | --- | --- |
+| Install -> working baseline mapping | Median <= 5 min on clean Win11 VM | Automated e2e test script | `logs/onboarding_timing.json` |
+| Environment bundle install success rate | >= 95% over 100 simulated installs | `uv run pytest tests/test_bundle_installer.py --count=100` | `logs/bundle_install_report.json` |
+| Host survivability on worker crash | >= 99.9% (host stays running) | `uv run pytest tests/stress/test_worker_crash_loop.py -n 1000` | `logs/survivability_report.json` |
+| Capture stability at 60 FPS baseline | >= 95% sessions without sustained drops | `uv run pytest tests/integration/test_capture_stability.py` | `logs/capture_stability.json` |
+| Premium plugin blocked without entitlement | 100% block rate | `uv run pytest tests/test_plugin_loader.cpp` | `logs/entitlement_gate_report.json` |
+| Unsigned artifact execution | 0 occurrences | `uv run pytest tests/test_security.py` | `logs/security_audit.json` |
 
 ---
 
