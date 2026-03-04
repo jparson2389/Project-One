@@ -11,7 +11,7 @@ Every item in this proposal uses a structured ID that links PLAN tasks back to P
 Format: `[DOMAIN-TYPE-NN] -> [PRD-§X.Y]`
 
 | Domain Prefix | Meaning |
-|---|---|
+| --- | --- |
 | `ABI` | Plugin ABI / contract boundaries |
 | `CAP` | Capture system |
 | `ENT` | Entitlements + premium gating |
@@ -799,7 +799,7 @@ failed state patches. Add `_recovery/*.patch` to `.gitignore`.
 Quick-reference: PRD section → all related PLAN items.
 
 | PRD Section | Traceability IDs |
-|---|---|
+| --- | --- |
 | §4 (Architectural Principles) | `ABI-FRZ-01`, `IPC-FRZ-01`, `IPC-SHM-01`, `PLT-BND-01`, `PLT-EXIT-*` |
 | §5.1 (Plugin System) | `ABI-FRZ-01`, `ABI-DEV-01/02`, `ABI-IO-01`, `ENT-GAT-01` |
 | §5.2 (Controller Adapter) | `ABI-IO-01`, `ABI-INT-02` |

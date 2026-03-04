@@ -27,6 +27,16 @@ automation = [
     "anyio>=4.0.0",
 ]
 
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+    "src/aetherlink/tests",
+    "src/aetherlink/plugins/tests"
+]
+python_files = "test_*.py"
+pythonpath = ["src"]
+addopts = "-ra -q"
+
 [project.scripts]
 aetherlink = "aetherlink.main:main"
 
