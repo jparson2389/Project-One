@@ -14,6 +14,7 @@ dependencies = [
     "protobuf>=6.33.5",
     "pydantic>=2.12.5",
     "pyside6==6.9.1",
+    "pyyaml>=6.0.3",
 ]
 
 [dependency-groups]
@@ -25,13 +26,6 @@ automation = [
     "openai>=1.40.0",
     "anyio>=4.0.0",
 ]
-
-[tool.setuptools]
-package-dir = { "" = "src" }
-
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["aetherlink"]
 
 [project.scripts]
 aetherlink = "aetherlink.main:main"

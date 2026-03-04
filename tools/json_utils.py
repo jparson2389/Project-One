@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import re
 from typing import Any
+
 from loguru import logger
 
 
@@ -51,6 +52,31 @@ def _extract_first_json_object(text: str) -> str | None:
     return None
 
 
+def _repair_triple_single_quotes(text: str) -> str:
+    """Remove triple single-quote delimiters that some models emit inside JSON strings.
+
+    Args:
+        text: Raw LLM response text.
+
+    Returns:
+        Text with triple single-quote string delimiters removed.
+    """
+    import re
+
+    # Replace: "content": '''...''' → "content": "..."
+    # Strategy: find ''' ... ''' blocks and replace with the inner content,
+    # escaping any double quotes inside.
+    def _replace(m: re.Match) -> str:
+        inner = m.group(1)
+        inner = inner.replace("\\", "\\\\")
+        inner = inner.replace('"', '\\"')
+        inner = inner.replace("\n", "\\n")
+        inner = inner.replace("\r", "")
+        return f'"{inner}"'
+
+    return re.sub(r"'''(.*?)'''", _replace, text, flags=re.DOTALL)
+
+
 def parse_json_object(
     raw: str,
     *,
@@ -72,6 +98,7 @@ def parse_json_object(
         ValueError: If no valid JSON object is found.
     """
     text = raw.strip()
+    text = _repair_triple_single_quotes(text)
     candidates: list[tuple[str, str]] = []
     if text:
         candidates.append(("direct", text))

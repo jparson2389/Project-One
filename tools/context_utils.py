@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any
 
 import yaml
+from loguru import logger
 
 
 def get_model_settings(model_name: str, router_path: Path | None = None) -> dict:
@@ -63,7 +65,7 @@ class ContextMonitor:
         # Check thresholds
         if usage_percentage > self.config["warning_threshold"]:
             pct = f"{usage_percentage:.1f}%"
-            print(f"[WARNING] High context usage: {pct} for {model_name}")
+            logger.warning(f"[context] high context usage: {pct} for {model_name}")
             if usage_percentage > self.config["fallback_threshold"]:
                 model_data["overflows"] += 1
                 self.context_stats["context_overflows"] += 1
@@ -102,8 +104,6 @@ class ContextMonitor:
 
     def save_stats(self, file_path: str = "context_usage_stats.json"):
         """Save context usage statistics to a JSON file"""
-        import json
-
         stats_to_save = {
             **self.context_stats,
             "model_details": {
@@ -117,8 +117,6 @@ class ContextMonitor:
     def load_stats(self, file_path: str = "context_usage_stats.json"):
         """Load context usage statistics from a JSON file"""
         try:
-            import json
-
             stats = json.loads(Path(file_path).read_text())
             self.context_stats.update(
                 {k: v for k, v in stats.items() if k not in ["model_details"]}

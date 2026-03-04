@@ -2,110 +2,25 @@
 
 ## 🛡️ Critical Safety Guardrail
 
-- **Git Context**: Before performing any `git push` or `git add`, verify that `.env`, `.cursor/`, and `.agents/` are not in the staging area.
-- **Secret Scanning**: If an API key is detected in a code block, block the save and alert the user.
+- **Git Safety**: Verify that `.env`, `.cursor/`, and `.agents/` are not staged before any `git push` or `git add`.
+- **Secret Scanning**: Block the save and alert the user if an API key is detected in a code block.
 
-## 🛠 Environment & Runtime
+## 🏗️ Architectural Boundaries
 
-- **Python**: `3.12`
-- **Manager**: [uv](https://github.com/astral-sh/uv)
-- **Venv**: Always use `.venv/` (created via `uv sync`).
-- **Execution**: Always prefix commands: `uv run <command>`.
+- **Source Separation**:
+  - Python source code lives exclusively in `src/aetherlink/`.
+  - Native C++ source code lives in `host/` (headers in `include/`).
+- **gRPC Protocol**: The `.proto` files in `proto/` are the authoritative source. Never manually edit generated `*_pb2.py` files.
+- **UI**: Always convert `.ui` files using `pyside6-uic` rather than manual coding.
 
-## Project Structure & File Locations
+## ✍️ Write Rules
 
-- **Rule**: Project structure is authoritative here. Agents must follow this layout even if legacy files exist elsewhere.
-- **Separation**:
-  - Source structure = development code (agents write here).
-  - Automation structure = generated outputs (tools only).
-  - Distribution structure = final packaged runtime (zip output).
+- **Canonical Paths**: If a file exists in multiple locations, update the existing canonical version; do not create duplicates.
+- **No Hallucinated Folders**: Do not create `capture_system/`, `engine/`, or `core/` at the root level.
+- **Root Files**: Approval is required for any new root-level file other than `PLAN.md` or `PRD.md`.
 
-- **Source (Development)**
-  - `src/aetherlink/` → main Python package.
-    - `core/` → runtime orchestration, plugin manager, shared logic.
-    - `ui/` → PySide6 UI shell and panels.
-    - `vision/` → capture + CV interfaces.
-    - `input/` → input abstractions.
-    - `output/` → output abstractions.
-    - `plugins/` → Python plugin interfaces/loaders.
-  - `proto/` → `.proto` definitions (authoritative source).
-  - `assets/` → icons, themes, UI assets.
-  - `include/` → native headers/contracts (if used).
-  - `host/` → native host/runtime bridge (if used).
-  - `docs/` → documentation.
-  - `tests/` → test code.
-  - `tools/` → automation scripts and developer tooling.
+## 🎨 Project Standards
 
-- **Automation / Generated Output**
-  - `state/` → automation state, plan execution data.
-  - `logs/` → runtime and automation logs.
-  - `build/` → temporary build artifacts.
-  - `dist/` → packaging staging output.
-  - Agents must NOT create new automation folders outside these.
-
-- **Distribution (Runtime ZIP Layout)**
-  - (These exist only inside the final `dist/AetherLink.zip` output, NOT in the dev root)
-  - `AetherLink.exe`
-  - `lib/` (Compiled dependencies)
-  - `plugins/` (Compiled `.dll` files ONLY)
-  - `assets/`
-  - `scripts/`
-  - This structure is runtime-only. Agents do NOT write here during normal development.
-
-- **Write Rules**
-  - All Python source must live under `src/`.
-  - Do not create new top-level folders without explicit approval.
-  - If a file already exists in multiple locations, do NOT create another copy.
-  - Prefer updating canonical paths instead of duplicating files.
-
-- **Forbidden Locations**
-  - `.venv/`
-  - `__pycache__/`
-  - `.pytest_cache/`
-  - `.ruff_cache/`
-  - Generated protobuf files (`*_pb2.py`, `*_pb2_grpc.py`) should not be manually edited.
-  - **NO HALLUCINATED FOLDERS**: Do not create capture_system/, engine/, core/(at root), protos/(use proto/), or relative/.
-  - **STRICT SEPARATION**: Never write C++ (.cpp/.h) files inside the src/ directory. src/ is exclusively for Python (src/aetherlink/). Native C++ plugin source code goes in the root plugins/ folder, and native headers go in the root include/ folder.
-
-- **Native Development (C++)**
-  - `host/`→ C++ source files (`.cpp`).
-  - `include/` → C++ header files (`.h`, `.hpp`).
-  - **Rule**: Keep Python and C++ logic strictly decoupled. Communication must happen via gRPC or established C-interfaces.
-
-- **Root-Level Files**
-  - Allowed: `pyproject.toml`, `README.md`, `AGENTS.md`, `PLAN.md`, `PRD.md`.
-  - Any new root-level file requires explicit approval.
-
-- **Agent Safety**
-  - Do not infer structure from accidental or legacy files.
-  - Follow AGENTS.md as the single source of truth for structure.
-
-## 🎨 Coding Standards (PEP 8 & 3.12 Syntax)
-
-- **Naming**: `snake_case` (functions/vars), `PascalCase` (classes), `UPPER_SNAKE_CASE` (constants).
-- **Typing (Modern)**:
-  - Use `type Alias = ...` (PEP 695).
-  - Use `int | str` instead of `Union`.
-  - Use `list[str]` instead of `List`.
-- **Imports**: Standard → Third-party → Local. Use absolute imports only.
-
-## ⚡ Quality Control & Commands
-
-- **UV Management**: Run `uv sync` to sync environment.
-- **Format**: Always use `uv run ruff format` to Format Python code.
-- **Lint & Fix**: Ruff `uv run ruff check --fix`
-- **Test**: Always use `uv run pytest` for testing.
-
-## 📦 Project Specifics
-
-- **Ignore**: Do not lint/format `*_pb2.py` or `*_pb2_grpc.py`.
-- **UI**: Convert `.ui` files using `pyside6-uic`.
-- **GRPC**: Generate via `uv run python -m grpc_tools.protoc`.
-- **Dependency Rule**: Never manually edit `uv.lock`. Always use `uv add` or `uv remove` to modify dependencies.
-
-## Security & Secrets
-
-- **Zero-Key Policy**: NEVER hardcode API keys, credentials, or tokens.
-- **Environment Variables**: Use `python-dotenv` for local development. Always check for `os.getenv()` or `pydantic_settings`.
-- **Validation**: If you see a file named `.env`, `secrets.json`, or `.pem`, ensure it is included in `.gitignore` before proceeding with any Git-related automation.
-- **Example Files**: When creating new secrets, always generate a corresponding `.env.example` with redacted values.
+- **Modern Python**: Use PEP 695 `type Alias = ...` and `int | str` for type hinting.
+- **Logging**: Use `loguru` for all logging; never use `print` statements.
+- **Testing**: Use `pytest` for all test suites.

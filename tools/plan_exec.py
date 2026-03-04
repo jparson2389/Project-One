@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -16,6 +17,10 @@ from openai import OpenAI
 try:
     from tools.context_utils import ContextMonitor
 except ModuleNotFoundError:
+    import sys
+
+    ROOT = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, str(ROOT / "tools"))
     from context_utils import ContextMonitor  # type: ignore[no-redef]
 
 try:
@@ -181,7 +186,19 @@ def phase_number(phase: str) -> int:
 
 def infer_agent_for_title(title: str) -> str:
     lowered = title.lower()
-    if any(token in lowered for token in ("abi", "proto", "contract")):
+    if any(
+        token in lowered
+        for token in (
+            "abi",
+            "proto",
+            "contract",
+            "plugin",
+            "stub",
+            "capture",
+            "memory",
+            "layout",
+        )
+    ):
         return "architect"
     return "ui-ux"
 
@@ -820,6 +837,8 @@ def main(argv: list[str] | None = None) -> int:
 
     max_retries: int = 3
     fix_prompt: str = ""
+    verdict: dict[str, Any] = {}
+    changed: list[str] = []
 
     for attempt in range(max_retries):
         logger.info(f"--- Implementation attempt {attempt + 1}/{max_retries} ---")
@@ -836,6 +855,9 @@ def main(argv: list[str] | None = None) -> int:
             "- Do not implement other PLAN items yet.\n"
             "- Minimal diffs.\n"
             "- Return JSON writes only.\n"
+            "- REQUIREMENT: No placeholder code. No 'pass',\n\n"
+            " no '# Add your implementation'\n\n"
+            " here'. Write real, working logic only.\n"
             "- REQUIREMENT: Python 3.12, PEP 8, Ruff 0.9.0 compliant.\n"
             "- REQUIREMENT: Use type hinting for all signatures.\n"
             "- REQUIREMENT: Prefer pydantic v2.12.5, asyncio for I/O.\n"
