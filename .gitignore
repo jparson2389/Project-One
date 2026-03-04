@@ -96,6 +96,8 @@ structure.txt
 STRUCTUREDOUTPUT.md
 UPDATE.md
 Layout-Endgoal.txt
+.tmp.drivedownload/
+.tmp.driveupload/
 
 # Ignore a specific file inside a subfolder
 docs/commands.md
