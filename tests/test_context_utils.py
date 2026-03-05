@@ -90,24 +90,25 @@ def test_context_monitor_persistence():
 
 
 def test_context_monitor_warning_messages():
-    """Test that warning messages are printed when thresholds are exceeded"""
+    """Test that warning messages are logged when thresholds are exceeded."""
     monitor = ContextMonitor()
     monitor.config["warning_threshold"] = 50  # Lower threshold for testing
 
-    with patch("builtins.print") as mock_print:
+    with patch("tools.context_utils.logger") as mock_logger:
         success = monitor.track_usage("architect", 9000, 16384)  # 55% usage
         assert success  # Still succeeds (above warning but below fallback)
 
-        # Verify warning was printed (54.9% = 9000/16384)
-        mock_print.assert_called_with(
-            "[WARNING] High context usage: 54.9% for architect"
+        # Verify warning was logged (54.9% = 9000/16384)
+        mock_logger.warning.assert_called_with(
+            "[context] high context usage: 54.9% for architect"
         )
 
     # Test fallback threshold
-    with patch("builtins.print") as mock_print:
+    with patch("tools.context_utils.logger") as mock_logger:
         success = monitor.track_usage("architect", 13500, 16384)  # 82% usage
         assert not success  # Fails at fallback threshold
 
-        # Verify warning was printed before failing
-        calls = [call[0][0] for call in mock_print.call_args_list]
-        assert "[WARNING] High context usage" in calls[-1]
+        # Verify warning was logged before failing
+        mock_logger.warning.assert_called()
+        last_msg = mock_logger.warning.call_args[0][0]
+        assert "[context] high context usage" in last_msg

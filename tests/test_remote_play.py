@@ -1,6 +1,7 @@
+from __future__ import annotations
 
-import pytest
 from src.aetherlink.core.remote_play import RemotePlayPlugin
+
 
 def test_remote_play_plugin_initialization() -> None:
     services = {}
@@ -28,4 +29,3 @@ def test_remote_play_plugin_get_capabilities() -> None:
         "plugin_type": "Remote-play integrations"
     }
     assert capabilities == expected_capabilities
-    

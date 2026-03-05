@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 ALLOWED_WRITE_PREFIXES: tuple[str, ...] = (
     "src/aetherlink/",
     "include/",
@@ -99,13 +101,7 @@ def validate_writes_payload(payload: dict[str, Any]) -> None:
             raise ValueError(f"Path traversal not allowed: {entry.path!r}")
         if not is_write_path_allowed(clean):
             raise ValueError(f"Path not in allowed locations: {entry.path!r}")
-    for idx, entry in enumerate(model.writes):
-        if "'''" in entry.content:
-            raise ValueError(
-                f"Invalid writes payload at index {idx}: "
-                "content contains triple single-quotes ('''). "
-                "Use escaped strings in JSON content."
-            )
+    # Content may contain ''' (e.g. docstrings); canonical rule in tools/prompts.py.
 
 
 def _safe_path(repo_root: Path, rel: str) -> Path:
@@ -152,7 +148,7 @@ def main() -> int:
     changed = apply_writes(repo_root, payload)
 
     for p in changed:
-        print(p.relative_to(repo_root))
+        logger.info(p.relative_to(repo_root))
 
     return 0
 

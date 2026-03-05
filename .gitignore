@@ -103,7 +103,7 @@ Layout-Endgoal.txt
 docs/commands.md
 
 # Codex temporary files
-.codex/hisotry.jsonl
+.codex/history.jsonl
 .codex/logs/
 hypercorn.toml
 secret_key

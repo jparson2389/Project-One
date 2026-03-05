@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
 from openai import OpenAI
 
 try:
@@ -47,7 +47,7 @@ def main() -> int:
     args = ap.parse_args()
 
     if not args.prompt and not args.prompt_file:
-        print("Provide --prompt or --prompt-file", file=sys.stderr)
+        logger.error("Provide --prompt or --prompt-file")
         return 2
 
     prompt = args.prompt or _read(args.prompt_file)
@@ -94,13 +94,12 @@ def main() -> int:
     content = (resp.choices[0].message.content or "").strip()
 
     if not args.apply:
-        print(content)
+        logger.info(content)
         return 0
 
     payload = _parse_json(content)
     if payload is None:
-        print("Expected JSON but could not parse model output:", file=sys.stderr)
-        print(content, file=sys.stderr)
+        logger.error("Expected JSON but could not parse model output:", content)
         return 3
 
     # Apply writes. Support both module invocation (`-m tools.agent_call`)
@@ -115,10 +114,10 @@ def main() -> int:
 
     notes = payload.get("notes", "")
     if isinstance(notes, str) and notes:
-        print(notes)
+        logger.info(notes)
 
     for p in changed:
-        print(p.relative_to(repo_root))
+        logger.info(p.relative_to(repo_root))
 
     return 0
 

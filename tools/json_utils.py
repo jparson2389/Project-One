@@ -137,7 +137,4 @@ def safe_json_from_model(stage: str, raw_text: str) -> dict[str, Any]:
     return parse_json_object(raw_text, stage=stage)
 
 
-SYSTEM_JSON_WRITES = """
-Return ONLY valid JSON. No markdown fences. No prose. No extra keys.
-...
-"""
+# Canonical system prompt for JSON writes: tools.prompts.SYSTEM_JSON_WRITES
