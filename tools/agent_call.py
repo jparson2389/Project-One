@@ -13,9 +13,9 @@ except ModuleNotFoundError:
     from json_utils import parse_json_object  # type: ignore[no-redef]
 
 try:
-    from tools.prompts import SYSTEM_JSON_WRITES
+    from tools.prompts import IMPL_SYSTEM, SYSTEM_JSON_WRITES
 except ModuleNotFoundError:
-    from prompts import SYSTEM_JSON_WRITES  # type: ignore[no-redef]
+    from prompts import IMPL_SYSTEM, SYSTEM_JSON_WRITES  # type: ignore[no-redef]
 
 
 def _read(path: str) -> str:
@@ -28,7 +28,6 @@ def _parse_json(s: str) -> dict[str, Any] | None:
     except ValueError:
         return None
 
-
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
@@ -39,7 +38,7 @@ def main() -> int:
     ap.add_argument("--include", action="append", default=[])
     ap.add_argument("--base-url", default="http://127.0.0.1:4000/v1")
     ap.add_argument("--api-key", default="anything")
-    ap.add_argument("--temperature", type=float, default=0.2)
+    ap.add_argument("--temperature", type=float, default=None)
     ap.add_argument("--json-writes", action="store_true")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--repo-root", default=".")
@@ -69,19 +68,18 @@ def main() -> int:
         prompt = f"DIRECTORY STRUCTURE:\n{tree}\n\n" + prompt + "\n" + "\n".join(ctx)
 
     client = OpenAI(base_url=args.base_url, api_key=args.api_key)
-    _agents_md_path = Path(args.repo_root) / "AGENTS.md"
-    _agents_block = (
-        f"\n\n# PROJECT RULES (AGENTS.md — authoritative)\n"
-        f"{_agents_md_path.read_text(encoding='utf-8')}\n"
-        if _agents_md_path.exists()
-        else ""
-    )
-    system = (
-        SYSTEM_JSON_WRITES + _agents_block
-        if (args.json_writes or args.apply)
-        else "Be concise and correct."
-    )
+    system = IMPL_SYSTEM if (args.json_writes or args.apply) else SYSTEM_JSON_WRITES
 
+    extra: dict[str, Any] = {}
+    if args.json_writes or args.apply:
+        extra["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "writes_response",
+                "strict": False,
+                "schema": {"type": "object", "additionalProperties": True},
+            },
+        }
     resp = client.chat.completions.create(
         model=args.agent,
         temperature=args.temperature,
@@ -89,6 +87,7 @@ def main() -> int:
             {"role": "system", "content": system},
             {"role": "user", "content": prompt},
         ],
+        **extra,
     )
 
     content = (resp.choices[0].message.content or "").strip()

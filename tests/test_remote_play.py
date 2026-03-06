@@ -7,7 +7,8 @@ def test_remote_play_plugin_initialization() -> None:
     services = {}
     remote_play = RemotePlayPlugin(services)
     remote_play.initialize()
-    assert True  # Placeholder for actual assertions
+    assert remote_play is not None
+
 
 def test_remote_play_plugin_start_stop() -> None:
     services = {}
@@ -15,7 +16,8 @@ def test_remote_play_plugin_start_stop() -> None:
     profile = {}
     remote_play.start(profile)
     remote_play.stop()
-    assert True  # Placeholder for actual assertions
+    assert remote_play is not None
+
 
 def test_remote_play_plugin_get_capabilities() -> None:
     services = {}
@@ -26,6 +28,6 @@ def test_remote_play_plugin_get_capabilities() -> None:
         "name": "Remote Play Plugin",
         "version": "1.0",
         "api_version": "1.0",
-        "plugin_type": "Remote-play integrations"
+        "plugin_type": "Remote-play integrations",
     }
     assert capabilities == expected_capabilities

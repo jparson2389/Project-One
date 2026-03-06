@@ -2,26 +2,16 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from loguru import logger
 from openai import OpenAI
-
-try:
-    from tools.context_utils import ContextMonitor
-except ModuleNotFoundError:
-    import sys
-
-    ROOT = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    sys.path.insert(0, str(ROOT / "tools"))
-    from context_utils import ContextMonitor  # type: ignore[no-redef]
+from pydantic import BaseModel, Field, field_validator
 
 try:
     from tools.json_utils import safe_json_from_model
@@ -29,17 +19,25 @@ except ModuleNotFoundError:
     from json_utils import safe_json_from_model  # type: ignore[no-redef]
 
 try:
-    from tools.prompts import SYSTEM_JSON_WRITES
+    from tools.prompts import IMPL_SYSTEM, SYSTEM_PM_NEXT, SYSTEM_PM_VERIFY
 except ModuleNotFoundError:
-    from prompts import SYSTEM_JSON_WRITES  # type: ignore[no-redef]
+    from prompts import (  # type: ignore[no-redef]
+        IMPL_SYSTEM,
+        SYSTEM_PM_NEXT,
+        SYSTEM_PM_VERIFY,
+    )
+
+try:
+    from tools.context_utils import ContextMonitor, count_tokens, get_model_settings
+except ModuleNotFoundError:
+    from context_utils import (  # type: ignore[no-redef]
+        ContextMonitor,
+        count_tokens,
+        get_model_settings,
+    )
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE_PATH = ROOT / "state" / "plan_state.json"
-
-_AGENTS_MD_PATH = ROOT / "AGENTS.md"
-_AGENTS_MD = (
-    _AGENTS_MD_PATH.read_text(encoding="utf-8") if _AGENTS_MD_PATH.exists() else ""
-)
 
 # Configure Loguru to write to a specfic logs folder
 LOG_DIR = ROOT / "logs"
@@ -47,55 +45,6 @@ LOG_DIR.mkdir(exist_ok=True)
 logger.add(
     LOG_DIR / "plan_execution_{time:YYYY-MM-DD}.log", rotation="1 MB", level="DEBUG"
 )
-
-SYSTEM_PM_NEXT = """Return ONLY valid JSON:
-{
-  "phase": "Phase 0|Phase 1|Phase 2|Phase 3|Phase 4",
-
-  "work_items": [
-    {
-      "id": "phaseX_slug",
-      "title": "short",
-      "agent": "architect|ui-ux",
-      "acceptance": ["testable bullets"],
-      "notes": "short"
-    }
-  ]
-}
-Rules:
-- Choose the earliest phase not completed.
-- Pick 1 work item (exactly ONE).
-- Item MUST be explicitly listed in PLAN.md under that phase.
-- The "title" must exactly match one PLAN.md bullet from that phase.
-- Acceptance criteria must only measure completion of that single selected item.
-- Do not use phase-wide exit criteria or global KPI targets
-  unless explicitly part of the selected item text.
-- For contract/proto/ABI use architect; for Qt shell/panels use ui-ux.
-No extra keys. No markdown.
-"""
-
-
-def _build_impl_system() -> str:
-    """Build the implementation system prompt with AGENTS.md injected."""
-    agents_block = (
-        f"\n\n# PROJECT RULES (AGENTS.md - authoritative)\n{_AGENTS_MD}\n"
-        if _AGENTS_MD
-        else ""
-    )
-    return SYSTEM_JSON_WRITES + agents_block
-
-
-SYSTEM_PM_VERIFY = """
-Return ONLY valid JSON:
-
-{"status":"pass|fail","missing":["..."],"notes":"short"}
-Rules:
-- Evaluate ONLY the explicit acceptance list in the provided work item payload.
-- Do not require unrelated phase exit criteria, global KPIs, or future milestone items.
-- If acceptance is empty, return fail and explain what is missing.
-- No extra keys. No markdown.
-"""
-
 
 SCHEMA_PM_NEXT = """{
   "phase": "Phase 0|Phase 1|Phase 2|Phase 3|Phase 4",
@@ -110,18 +59,34 @@ SCHEMA_PM_NEXT = """{
   ]
 }"""
 
-SCHEMA_JSON_WRITES = """{
-  "writes": [{"path": "relative/path", "content": "file contents"}],
-  "notes": "short"
-}"""
-
 SCHEMA_PM_VERIFY = """{
   "status": "pass|fail",
   "missing": ["..."],
   "notes": "short"
 }"""
+try:
+    from tools.apply_writes import (  # type: ignore
+        ALLOWED_ROOT_FILES,
+        ALLOWED_WRITE_PREFIXES,
+        DENIED_WRITE_PATHS,
+        PLACEHOLDER_WRITE_PATHS,
+        validate_writes_payload,
+    )
+except ModuleNotFoundError:  # pragma: no cover
+    from apply_writes import (  # type: ignore
+        ALLOWED_ROOT_FILES,
+        ALLOWED_WRITE_PREFIXES,
+        DENIED_WRITE_PATHS,
+        PLACEHOLDER_WRITE_PATHS,
+        validate_writes_payload,
+    )
 
-SCHEMA_HINT_IMPL = """\
+_HINT_PREFIXES = ", ".join(sorted(ALLOWED_WRITE_PREFIXES))
+_HINT_ROOT = ", ".join(sorted(ALLOWED_ROOT_FILES))
+_HINT_DENIED = ", ".join(sorted(DENIED_WRITE_PATHS))
+_HINT_PLACEHOLDER = ", ".join(sorted(PLACEHOLDER_WRITE_PATHS))
+
+_SCHEMA_EXAMPLE = """\
 REQUIRED JSON SCHEMA - writes payload:
 {
   "writes": [
@@ -132,37 +97,110 @@ REQUIRED JSON SCHEMA - writes payload:
   ],
   "notes": "<one-sentence summary>"
 }
-
-HARD RULES:
-- writes[].path must start with one of: src/aetherlink/, tests/, tools/,
-proto/, assets/, docs/, state/
-- writes[].path must NEVER be: src/plugins/*, *.cpp, *.h inside src/
-- writes[].content must NEVER contain triple double-quotes ("\"\")
-- Use single-quoted docstrings: '''Google-style docstring.'''
-- All function signatures must include type hints
-- All public functions must have a Google-style single-quoted docstring
-- No placeholder paths like "relative/path" or "path/to/file"
-- No absolute paths
 """
 
-try:
-    from tools.apply_writes import (  # type: ignore
-        ALLOWED_ROOT_FILES,
-        ALLOWED_WRITE_PREFIXES,
-        validate_writes_payload,
-    )
-except ModuleNotFoundError:  # pragma: no cover
-    from apply_writes import (  # type: ignore
-        ALLOWED_ROOT_FILES,
-        ALLOWED_WRITE_PREFIXES,
-        validate_writes_payload,
-    )
+SCHEMA_HINT_IMPL = _SCHEMA_EXAMPLE+ f"""\
+HARD RULES:
+- Allowed prefixes: {_HINT_PREFIXES}
+- Allowed root files: {_HINT_ROOT}
+- Forbidden paths (hard block): {_HINT_DENIED}
+- Forbidden placeholders (hard block): {_HINT_PLACEHOLDER}
+- writes[i].path must NEVER be: src/plugins/*, *.cpp, *.h inside src/
+- writes[i].content must NEVER contain triple double-quotes
+- Use ONLY single-quoted docstrings: \'\'\'Google-style docstring.\'\'\'
+- All function signatures must include type hints
+- All public functions must have a Google-style single-quoted docstring
+- All paths must be repository-relative (never absolute).
+"""
 
-try:
-    from tools.json_utils import safe_json_from_model  # type: ignore
-except ModuleNotFoundError:
-    from json_utils import safe_json_from_model  # type: ignore[no-redef]
+class AgentManifest(BaseModel):
+    '''Validated manifest for LLM router connection.'''
+    base_url: str
+    api_key: str
 
+class PlanWorkItem(BaseModel):
+    """A single work item parsed from PLAN.md."""
+
+    id: str
+    phase: str
+    title: str
+    status: Literal["done", "open"]
+    instructions: str = ""
+
+
+class StateItem(BaseModel):
+    """A persisted work item in plan_state.json."""
+
+    id: str
+    phase: str
+    title: str
+    instructions: str = ""
+    status: str = "missing"
+    notes: str = ""
+    updated_at: str = ""
+    missing: list[str] = Field(default_factory=list)
+    evidence: list[str] = Field(default_factory=list)
+
+    @field_validator("missing", "evidence", mode="before")
+    @classmethod
+    def clean_str_list(cls, v: Any) -> list[str]:
+        """Strip and filter empty strings from list fields."""
+        if not isinstance(v, list):
+            return []
+        return [str(x) for x in v if str(x).strip()]
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def default_missing_status(cls, v: Any) -> str:
+        """Fall back to missing if status is blank."""
+        return str(v).strip() or "missing"
+
+    @field_validator("updated_at", mode="before")
+    @classmethod
+    def default_timestamp(cls, v: Any) -> str:
+        """Fall back to current time if updated_at is blank."""
+        return str(v).strip() or _now_iso()
+
+
+class PMWorkItem(BaseModel):
+    """A single work item returned by the PM agent."""
+
+    id: str = ""
+    title: str
+    agent: Literal["architect", "ui-ux"]
+    acceptance: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+
+class PMResponse(BaseModel):
+    """Full response from the PM next-item selector."""
+
+    phase: str
+    work_items: list[PMWorkItem]
+
+
+class ModelCall(BaseModel):
+    """Immutable result from a single LLM call."""
+
+    model_config = {"frozen": True}
+    requested_model: str
+    actual_model: str
+    content: str
+
+class PMVerdict(BaseModel):
+    """Verification result returned by the PM verify agent."""
+
+    status: Literal["pass", "fail"]
+    missing: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+    @field_validator("missing", mode="before")
+    @classmethod
+    def clean_missing(cls, v: Any) -> list[str]:
+        """Strip and filter empty strings from missing list."""
+        if not isinstance(v, list):
+            return []
+        return [str(x) for x in v if str(x).strip()]
 
 def _now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
@@ -210,21 +248,23 @@ _PHASE_HEADER_RE = re.compile(
 _ITEM_RE = re.compile(r"^\s*-\s*\[(?P<mark>[ xX])\]\s+(?P<title>.+?)\s*$")
 
 
-def extract_phase_work_items(plan_text: str) -> list[dict[str, Any]]:
+def extract_phase_work_items(plan_text: str) -> list[PlanWorkItem]:
     """Parse PLAN.md into structured work items via a line-by-line state machine.
 
     Tolerates em dash, en dash, and hyphen as phase header separators.
     Captures blockquote (>) instruction lines attached to each checklist item.
     """
-    items: list[dict[str, Any]] = []
+    items: list[PlanWorkItem] = []
     current_phase: str = ""
-    current_item: dict[str, Any] | None = None
+    current_item: PlanWorkItem | None = None
     instruction_lines: list[str] = []
 
     def _flush_item() -> None:
+        nonlocal current_item
         if current_item is not None:
-            current_item["instructions"] = "\n".join(instruction_lines).strip()
-            items.append(current_item)
+            items.append(current_item.model_copy(
+                update={"instructions": "\n".join(instruction_lines).strip()}
+            ))
 
     for raw_line in plan_text.splitlines():
         # Phase header?
@@ -244,13 +284,12 @@ def extract_phase_work_items(plan_text: str) -> list[dict[str, Any]]:
             instruction_lines = []
             mark = item_m.group("mark").strip().lower()
             title = item_m.group("title").strip()
-            current_item = {
-                "id": work_item_id(current_phase, title),
-                "phase": current_phase,
-                "title": title,
-                "status": "done" if mark == "x" else "open",
-                "instructions": "",
-            }
+            current_item = PlanWorkItem(
+                id=work_item_id(current_phase, title),
+                phase=current_phase,
+                title=title,
+                status="done" if mark == "x" else "open",
+            )
             continue
 
         stripped = raw_line.strip()
@@ -289,7 +328,7 @@ def save_plan_state(state: dict[str, Any]) -> None:
     STATE_PATH.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
 
 
-def load_or_initialize_plan_state(plan_items: list[dict[str, str]]) -> dict[str, Any]:
+def load_or_initialize_plan_state(plan_items: list[PlanWorkItem]) -> dict[str, Any]:
     existing: dict[str, Any] = {}
     if STATE_PATH.exists():
         try:
@@ -303,18 +342,21 @@ def load_or_initialize_plan_state(plan_items: list[dict[str, str]]) -> dict[str,
         for entry in raw_items:
             if not isinstance(entry, dict):
                 continue
-            normalized = _normalize_state_item(entry)
-            if normalized["id"]:
-                existing_items[normalized["id"]] = normalized
+            try:
+                item = StateItem.model_validate(entry)
+                if item.id:
+                    existing_items[item.id] = item.model_dump()
+            except Exception:
+                continue
 
     merged_items: list[dict[str, Any]] = []
     for plan_item in plan_items:
-        key = plan_item["id"]
+        key = plan_item.id
         base = {
             "id": key,
-            "phase": plan_item["phase"],
-            "title": plan_item["title"],
-            "instructions": plan_item["instructions"],
+            "phase": plan_item.phase,
+            "title": plan_item.title,
+            "instructions": plan_item.instructions,
             "status": "missing",
             "notes": "",
             "updated_at": _now_iso(),
@@ -323,8 +365,8 @@ def load_or_initialize_plan_state(plan_items: list[dict[str, str]]) -> dict[str,
         }
         if key in existing_items:
             persisted = existing_items[key]
-            persisted["phase"] = plan_item["phase"]
-            persisted["title"] = plan_item["title"]
+            persisted["phase"] = plan_item.phase
+            persisted["title"] = plan_item.title
             base.update(persisted)
         merged_items.append(base)
 
@@ -467,13 +509,6 @@ def append_history(
     history.append(payload)
 
 
-@dataclass(frozen=True)
-class ModelCall:
-    requested_model: str
-    actual_model: str
-    content: str
-
-
 def run_ps(path: str, args: list[str] | None = None) -> tuple[int, str]:
     cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(ROOT / path)]
     if args:
@@ -506,6 +541,14 @@ def call(
     resp = client.chat.completions.create(
         model=model,
         temperature=temperature,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "writes_responses",
+                "strict": False,
+                "schema": {"type": "object", "additionalProperties": True},
+            },
+        },
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -536,18 +579,30 @@ def call_json_with_retry(
     schema_hint: str,
     temperature: float | None = None,  # let the model use its default temperature
 ) -> dict[str, Any]:
+    from pathlib import Path
+
+    debug_dir = Path("logs")
+    debug_dir.mkdir(exist_ok=True)
+
+    safe_stage = stage.replace("/", "_").replace("\\", "_")
+    (debug_dir / f"prompt_system_{safe_stage}.txt").write_text(
+        system,
+        encoding="utf-8",
+    )
+    (debug_dir / f"prompt_user_{safe_stage}.txt").write_text(
+        user,
+        encoding="utf-8",
+    )
     initial = call(client, model, system, user, temperature=temperature)
     logger.debug(
         f"[llm] stage={stage} requested_alias={initial.requested_model} "
         f"actual_model={initial.actual_model} chars={len(initial.content)}"
     )
-    if (
-        initial.requested_model == "pm"
-        and "deepseek" not in initial.actual_model.lower()
-    ):
+    if initial.requested_model != initial.actual_model:
         logger.debug(
-            f"[llm] stage={stage} pm_fallback_used=true "
-            f"resolved_model={initial.actual_model}"
+            f"[llm] stage={stage} alias_resolved "
+            f"requested_alias={initial.requested_model} "
+            f"actual_model={initial.actual_model}"
         )
 
     try:
@@ -562,18 +617,20 @@ def call_json_with_retry(
         "Previous response:\n"
         f"{initial.content}"
     )
-    repaired = call(client, model, system, repair_user, temperature=0.0)
+    (debug_dir / f"prompt_repair_user_{safe_stage}.txt").write_text(
+        repair_user,
+        encoding="utf-8",
+    )
+    repaired = call(client, model, system, repair_user, temperature=None)
     logger.debug(
         f"[llm] stage={stage} retry=1 requested_alias={repaired.requested_model} "
         f"actual_model={repaired.actual_model} chars={len(repaired.content)}"
     )
-    if (
-        repaired.requested_model == "pm"
-        and "deepseek" not in repaired.actual_model.lower()
-    ):
+    if repaired.requested_model != repaired.actual_model:
         logger.debug(
-            f"[llm] stage={stage} retry=1 pm_fallback_used=true "
-            f"resolved_model={repaired.actual_model}"
+            f"[llm] stage={stage} retry=1 alias_resolved=true "
+            f"requested_alias={repaired.requested_model} "
+            f"actual_model={repaired.actual_model}"
         )
     try:
         return safe_json_from_model(stage, repaired.content)
@@ -689,13 +746,7 @@ def main(argv: list[str] | None = None) -> int:
         base_url=manifest["base_url"],
         api_key=manifest["api_key"],
         timeout=300,
-        default_query={
-            "response_format": {
-                "type": "json_object",
-            },
-        },
     )
-
     plan = (ROOT / args.plan).read_text(encoding="utf-8", errors="ignore")
     prd = (
         (ROOT / args.prd).read_text(encoding="utf-8", errors="ignore")
@@ -773,41 +824,35 @@ def main(argv: list[str] | None = None) -> int:
         temperature=None,  # let the model use its default temperature
     )
 
-    queued_items = queue.get("work_items", [])
-    chosen: dict[str, Any] | None = None
-    if (
-        isinstance(queued_items, list)
-        and queued_items
-        and isinstance(queued_items[0], dict)
-    ):
-        chosen = queued_items[0]
+    try:
+        pm_response = PMResponse.model_validate(queue)
+        chosen_item = next(iter(pm_response.work_items), None)
+        queued_phase = pm_response.phase
+    except Exception:
+        chosen_item = None
+        queued_phase = ""
 
-    fallback_choice = open_items[0]
+    fallback_choice = next(iter(open_items), None)
+    if fallback_choice is None:
+        logger.error("No open items available.")
+        return 1
     fallback_title = str(fallback_choice.get("title", "")).strip()
     selected_title = fallback_title
     selected_agent = infer_agent_for_title(fallback_title)
     raw_acceptance: list[Any] = []
-
     invalid_reason = ""
-    queued_phase = str(queue.get("phase", "")).strip()
 
-    if not chosen:
+    if not chosen_item:
         invalid_reason = "missing_work_item"
     else:
-        candidate_title = str(chosen.get("title", "")).strip()
-        candidate_agent = str(chosen.get("agent", "")).strip()
         if queued_phase != selected_phase:
             invalid_reason = "phase_mismatch"
-        elif candidate_title not in allowed_titles:
+        elif chosen_item.title not in allowed_titles:
             invalid_reason = "title_not_open"
-        elif candidate_agent not in {"architect", "ui-ux"}:
-            invalid_reason = "invalid_agent"
         else:
-            selected_title = candidate_title
-            selected_agent = candidate_agent
-            candidate_acceptance = chosen.get("acceptance", [])
-            if isinstance(candidate_acceptance, list):
-                raw_acceptance = candidate_acceptance
+            selected_title = chosen_item.title
+            selected_agent = chosen_item.agent
+            raw_acceptance = chosen_item.acceptance
 
     if invalid_reason:
         logger.warning(f"[pm_next] invalid_selection={invalid_reason} fallback=true")
@@ -839,6 +884,7 @@ def main(argv: list[str] | None = None) -> int:
     fix_prompt: str = ""
     verdict: dict[str, Any] = {}
     changed: list[str] = []
+    parsed_verdict = PMVerdict.model_validate({"status": "fail", "notes": ""})
 
     for attempt in range(max_retries):
         logger.info(f"--- Implementation attempt {attempt + 1}/{max_retries} ---")
@@ -853,20 +899,10 @@ def main(argv: list[str] | None = None) -> int:
             f"{prd_summary}\n\n"
             "Constraints:\n"
             "- Do not implement other PLAN items yet.\n"
+            "- Only touch files necessary for this work item.\n"
             "- Minimal diffs.\n"
-            "- Return JSON writes only.\n"
-            "- REQUIREMENT: No placeholder code. No 'pass',\n\n"
-            " no '# Add your implementation'\n\n"
-            " here'. Write real, working logic only.\n"
-            "- REQUIREMENT: Python 3.12, PEP 8, Ruff 0.9.0 compliant.\n"
-            "- REQUIREMENT: Use type hinting for all signatures.\n"
-            "- REQUIREMENT: Prefer pydantic v2.12.5, asyncio for I/O.\n"
-            "- REQUIREMENT: Write tests using pytest v9.0.2.\n"
-            "- PATH RULE: Never write to src/plugins/* (forbidden).\n"
-            "- PATH RULE: Use src/aetherlink/plugins/* instead.\n"
-            "- JSON RULE: Do NOT use triple double quotes anywhere.\n"
-            "- JSON RULE: writes[].content must not contain unescaped double quotes.\n"
-            "- JSON RULE: Prefer single quotes in code strings.\n"
+            "- Write real, working logic only.\n"
+            "- No placeholder code.\n"
         )
 
         if fix_prompt:
@@ -874,9 +910,12 @@ def main(argv: list[str] | None = None) -> int:
 
         # FIX 2b: Use explicit router alias
         model_alias = selected_agent
-        prompt_len = len(impl_prompt.split())
-        max_window = 16384
-        if not _ctx_monitor.track_usage(model_alias, prompt_len, max_window):
+
+        if not _ctx_monitor.track_usage(
+            model_alias,
+            count_tokens(impl_prompt),
+            int(get_model_settings(model_alias).get("context_window", 16384)),
+        ):
             logger.warning(
                 f"[context] prompt near limit for {model_alias} - truncating"
             )
@@ -887,7 +926,7 @@ def main(argv: list[str] | None = None) -> int:
             client=client,
             stage=f"impl_{selected_agent}",
             model=model_alias,
-            system=_build_impl_system(),
+            system=IMPL_SYSTEM,
             user=impl_prompt,
             schema_hint=SCHEMA_HINT_IMPL,
             temperature=None,
@@ -901,8 +940,10 @@ def main(argv: list[str] | None = None) -> int:
                 fix_prompt = (
                     "Your JSON writes payload was rejected by path validation.\n"
                     "Rules:\n"
-                    f"- Allowed prefixes: {', '.join(ALLOWED_WRITE_PREFIXES)}\n"
-                    f"- Allowed root files: {', '.join(sorted(ALLOWED_ROOT_FILES))}\n"
+                    f"- Allowed prefixes: {_HINT_PREFIXES}\n"
+                    f"- Allowed root files: {_HINT_ROOT}\n"
+                    f"- Forbidden paths: {_HINT_DENIED}\n"
+                    f"- Forbidden placeholders: {_HINT_PLACEHOLDER}\n"
                     "- Do NOT write to src/plugins/*.\n"
                     "- If you meant a Python package plugin,\n"
                     "- write under src/aetherlink/plugins/.\n"
@@ -984,7 +1025,7 @@ def main(argv: list[str] | None = None) -> int:
                     client=client,
                     stage="quick_fix",
                     model="quick-fix",
-                    system=_build_impl_system(),
+                    system=IMPL_SYSTEM,
                     user=q_fix_prompt,
                     schema_hint=SCHEMA_HINT_IMPL,
                     temperature=None,
@@ -1098,12 +1139,16 @@ def main(argv: list[str] | None = None) -> int:
             schema_hint=SCHEMA_PM_VERIFY,
             temperature=None,
         )
-        if verdict.get("status") != "pass":
-            missing = verdict.get("missing", [])
-            missing_list = (
-                [str(x) for x in missing] if isinstance(missing, list) else []
+        try:
+            parsed_verdict = PMVerdict.model_validate(verdict)
+        except Exception:
+            parsed_verdict = PMVerdict.model_validate(
+                {"status": "fail", "notes": "Invalid verdict response"}
             )
-            notes = str(verdict.get("notes", "")).strip()
+
+        if parsed_verdict.status != "pass":
+            missing_list = parsed_verdict.missing
+            notes = parsed_verdict.notes
 
             if attempt < max_retries - 1:
                 logger.warning(f"PM Verify Failed. Notes: {notes}")
@@ -1128,13 +1173,12 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
         # All 3 layers passed - exit the retry loop immediately
         break
-
     logger.success(f"Task Done: {selected_title} — all 3 layers passed.")
     update_state_item(
         state,
         selected_item_id,
         status="done",
-        notes=str(verdict.get("notes", "")).strip(),
+        notes=parsed_verdict.notes,
         missing=[],
         evidence=changed,
     )

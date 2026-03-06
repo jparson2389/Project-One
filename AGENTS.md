@@ -24,8 +24,8 @@
   - Format: `uv run ruff format .`
 
 ## Frozen Contracts (DO NOT MODIFY)
-- `src/aetherlink/plugins/include/plugin_system.hpp`
-- `src/aetherlink/proto/capture.proto`
+- `include/plugin_system.hpp`
+- `proto/capture.proto`
 - `src/aetherlink/core/shared_memory_layout.py`
 
 ## Boundaries
@@ -42,6 +42,12 @@
 | ALWAYS | TDD — test first |
 | ALWAYS | `uv run ruff check && uv run pytest` before done |
 | ALWAYS | Google-format docstrings + type hints |
+
+## Forbidden Paths (agents must never create these)
+- `src/plugins/*` — use `src/aetherlink/plugins/` instead
+- `src/**/_stubs/` — no stub directories anywhere in src/
+- `src/**/*.cpp` / `src/**/*.h` / `src/**/*.hpp` — C++ never in src/
+- Any new top-level directory without explicit human approval
 
 ## Atomic Recovery Protocol (ARP)
 On any validation failure:

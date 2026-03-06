@@ -1,4 +1,6 @@
-from pydantic import Any, BaseModel
+from typing import Any
+
+from pydantic import BaseModel
 
 
 class PluginIdentity(BaseModel):

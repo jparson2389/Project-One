@@ -38,7 +38,9 @@ This revision adds specific plugin-driven capability requirements derived from t
   traceability update.
 
 ### Guardrails (Hard Boundaries + Automated Gates)
-- NEVER load a premium plugin DLL without a valid entitlement token.
+- NEVER load a premium plugin DLL without a valid entitlement token. A
+  grace-period token (GRACE state) is conditionally valid: loading is
+  permitted but the user must be warned of imminent expiry.
 - NEVER execute an unsigned artifact.
 - NEVER modify `plugin_system.hpp` without a breaking-change log entry.
 - NEVER bypass gRPC for worker-to-host communication.
@@ -214,10 +216,15 @@ Each plugin must expose:
 | `Host::LoadPlugin(plugin_id)` called | Plugin is NOT premium | Load normally | `LOADED` |
 | `Host::LoadPlugin(plugin_id)` called | Plugin is premium, entitlement valid | Load plugin | `LOADED` |
 | `Host::LoadPlugin(plugin_id)` called | Plugin is premium, entitlement invalid | Block load, show purchase CTA | `LOCKED` |
+| `Host::LoadPlugin(plugin_id)` called | Plugin is premium, grace period active | Load plugin, warn user of expiry | `GRACE` |
+| `Host::LoadPlugin(plugin_id)` called | Plugin is premium, grace period expired | Block load, show renewal CTA | `LOCKED` |
 | Purchase completed | Entitlement token received | Refresh entitlement cache | `ELIGIBLE` |
 | Entitlement refresh | Token valid | Enable plugin without reinstall | `LOADED` |
 | TTL expires (offline) | Grace period active | Warn user, maintain access | `GRACE` |
 | TTL expires (offline) | Grace period expired | Lock premium features | `LOCKED` |
+
+GRACE state: entitlement is conditionally valid; premium plugins may load with
+expiry warning. LOCKED state: entitlement invalid; premium load blocked.
 
 #### Python Worker Lifecycle
 `[WRK-TAR-01] -> [PRD-§5.9]`

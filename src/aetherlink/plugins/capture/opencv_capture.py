@@ -1,17 +1,27 @@
+"""OpenCV Capture Plugin."""
+
+
 class OpenCVCapturePlugin:
-    def Initialize(self, services):
+    """Plugin for capturing video using OpenCV."""
+
+    def initialize(self, services):
+        """Initialize the plugin."""
         pass
 
-    def Start(self, profile):
+    def start(self, profile):
+        """Start capturing."""
         pass
 
-    def Stop(self):
+    def stop(self):
+        """Stop capturing."""
         pass
 
-    def Shutdown(self):
+    def shutdown(self):
+        """Shutdown the plugin."""
         pass
 
-    def GetCapabilities(self):
+    def get_capabilities(self):
+        """Get plugin capabilities."""
         return {
             "capture_width": 1920,
             "capture_height": 1080,
@@ -21,10 +31,13 @@ class OpenCVCapturePlugin:
         }
 
     def required_entitlements(self):
+        """Get required entitlements."""
         return []
 
     def requires_drivers(self):
+        """Get required drivers."""
         return []
 
     def requires_worker(self):
+        """Check if worker is required."""
         return False

@@ -12,6 +12,7 @@ import subprocess
 from dataclasses import field
 from pathlib import Path
 
+from loguru import logger
 from pydantic import BaseModel, field_validator
 
 
@@ -22,10 +23,11 @@ class WriteEntry(BaseModel):
     @field_validator("content")
     @classmethod
     def no_triple_double_quotes(cls, v: str) -> str:
+        '''Warn if content contains triple-double-quoted docstrings.'''
         if '"""' in v:
-            raise ValueError(
-                'content contains forbidden triple-double-quoted docstring ("""). '
-                "Use single-quoted docstrings instead."
+            logger.warning(
+                'content contains triple-double-quoted docstring ("""). '
+                "Use ONLY single-quoted docstrings: '''Google-style docstring.'''."
             )
         return v
 

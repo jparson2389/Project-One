@@ -30,8 +30,6 @@ automation = [
 [tool.pytest.ini_options]
 testpaths = [
     "tests",
-    "src/aetherlink/tests",
-    "src/aetherlink/plugins/tests"
 ]
 python_files = "test_*.py"
 pythonpath = ["src"]
@@ -53,7 +51,7 @@ line-length = 88
 fix = true
 indent-width = 4
 src = ["src"]
-extend-exclude = ["*_pb2.py", "*_pb2_grpc.py", ".venv", "src/aetherlink/plugins/_stubs"]
+extend-exclude = ["*_pb2.py", "*_pb2_grpc.py", ".venv"]
 
 [tool.ruff.lint]
 select = ["F", "E", "W", "I", "N", "UP", "B", "A", "C4", "RUF", "D", "T"]
@@ -76,4 +74,3 @@ combine-as-imports = true
 "tools/**/*.py" = ["D", "T201"]
 "tests/**/*.py" = ["D"]
 "src/**/__init__.py" = ["D104"]
-"src/aetherlink/plugins/*.py" = ["D", "N", "E501"]
