@@ -1,21 +1,20 @@
-"""Abstract plugin interface for runtime-loaded plugins."""
+"""Core abstraction for dynamic Python plugins in Aetherlink."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
 
 
 class PluginInterface(ABC):
-    """Define the minimal lifecycle surface for a plugin."""
+    """Abstract base class mirroring the C-ABI plugin lifecycle contract."""
 
     @abstractmethod
-    def initialize(self, services: dict[str, Any]) -> None:
-        """Initialize the plugin with host-provided services."""
+    def initialize(self) -> None:
+        """Initialize the plugin."""
 
     @abstractmethod
-    def start(self, profile: dict[str, Any]) -> None:
-        """Start the plugin using a profile/config."""
+    def start(self) -> None:
+        """Start the plugin."""
 
     @abstractmethod
     def stop(self) -> None:
@@ -23,18 +22,16 @@ class PluginInterface(ABC):
 
     @abstractmethod
     def shutdown(self) -> None:
-        """Release all plugin resources."""
+        """Shutdown the plugin."""
 
     @abstractmethod
-    def get_capabilities(self) -> dict[str, Any]:
-        """Return a capability dictionary for the host."""
+    def get_capabilities(self) -> dict:
+        """Return plugin capabilities."""
 
-    @property
     @abstractmethod
-    def required_entitlements(self) -> list[str]:
-        """Return required entitlements (license features) for this plugin."""
+    def required_entitlements(self) -> list:
+        """Return required entitlements."""
 
-    @property
     @abstractmethod
     def requires_worker(self) -> bool:
-        """Return whether this plugin requires a Python worker process."""
+        """Return whether the plugin requires a worker."""

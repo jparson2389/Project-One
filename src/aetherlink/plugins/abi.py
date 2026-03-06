@@ -1,3 +1,5 @@
+"""Data models defining the standard native Application Binary Interface."""
+
 from typing import Any
 
 from pydantic import BaseModel

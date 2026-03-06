@@ -1,3 +1,5 @@
+"""Interface definitions for XInput controller state abstraction."""
+
 from abc import ABC, abstractmethod
 
 

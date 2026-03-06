@@ -20,7 +20,7 @@ def pytest_configure():
         sys.path.insert(0, str(project_root))
 
     # Make tools available (with __init__.py)
-    tools_path = project_root / "tools"
+    tools_path = project_root / 'tools'
     if str(tools_path) not in sys.path:
         sys.path.insert(0, str(tools_path))
 
@@ -48,7 +48,7 @@ model_list:
       max_tokens: 2560
       context_window: 32768
 """
-    temp_file = Path("tests/temp_router.yaml")
+    temp_file = Path('tests/temp_router.yaml')
     temp_file.write_text(yaml_content)
     yield str(temp_file)
     temp_file.unlink()
