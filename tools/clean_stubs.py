@@ -14,11 +14,11 @@ def _cleanup_stubs(stub_dir):
             try:
                 os.unlink(item_path)
             except Exception as e:
-                logger.error(f"Failed to delete {item_path}: {e}")
+                logger.error(f'Failed to delete {item_path}: {e}')
         elif os.path.isdir(item_path):
             shutil.rmtree(item_path)
 
 
-if __name__ == "__main__":
-    stub_dir = Path("src/aetherlink/plugins/capture/_stubs/")
+if __name__ == '__main__':
+    stub_dir = Path('src/aetherlink/plugins/capture/_stubs/')
     _cleanup_stubs(stub_dir)

@@ -17,13 +17,14 @@ except ModuleNotFoundError:
         PLACEHOLDER_WRITE_PATHS,
     )
 
-_ALLOWED_PREFIXES_STR = ", ".join(sorted(ALLOWED_WRITE_PREFIXES))
-_ALLOWED_ROOT_STR = ", ".join(sorted(ALLOWED_ROOT_FILES))
-_DENIED_STR = ", ".join(sorted(DENIED_WRITE_PATHS))
-_PLACEHOLDER_STR = ", ".join(sorted(PLACEHOLDER_WRITE_PATHS))
-_AGENTS_MD_PATH = Path(__file__).resolve().parents[1] / "AGENTS.md"
-_AGENTS_MD = _AGENTS_MD_PATH.read_text(
-    encoding="utf-8") if _AGENTS_MD_PATH.exists() else ""
+_ALLOWED_PREFIXES_STR = ', '.join(sorted(ALLOWED_WRITE_PREFIXES))
+_ALLOWED_ROOT_STR = ', '.join(sorted(ALLOWED_ROOT_FILES))
+_DENIED_STR = ', '.join(sorted(DENIED_WRITE_PATHS))
+_PLACEHOLDER_STR = ', '.join(sorted(PLACEHOLDER_WRITE_PATHS))
+_AGENTS_MD_PATH = Path(__file__).resolve().parents[1] / 'AGENTS.md'
+_AGENTS_MD = (
+    _AGENTS_MD_PATH.read_text(encoding='utf-8') if _AGENTS_MD_PATH.exists() else ''
+)
 
 SYSTEM_JSON_WRITES = f"""
 Return exactly one valid JSON object matching the required schema.
@@ -37,13 +38,13 @@ JSON RULES:
 - JSON escaping must be correct.
 - Prefer single-quoted Python strings and docstrings when practical.
 - Do NOT use Python triple-double-quoted docstrings.
-- Use ONLY single-quoted docstrings: \'\'\'Google-style docstring.\'\'\'
+- Use ONLY single-quoted docstrings with meaningful content.
 
 PYTHON CODING RULES (PEP 8 / Python 3.12):
 - Follow PEP 8 strictly.
 - Use type hinting for ALL function signatures.
 - Prefer pydantic v2 for data validation; asyncio for I/O-bound tasks.
-- Include Google-format single-quoted docstrings for all public functions.
+- Use ONLY single-quoted docstrings with meaningful content.
 - Use loguru logger — never print().
 - Use modern built-in generics and unions.
 
@@ -59,9 +60,9 @@ PATH RULES (ENFORCED BY VALIDATOR — violations will be rejected):
 """
 
 IMPL_SYSTEM = SYSTEM_JSON_WRITES + (
-    f"\n\n# PROJECT RULES (AGENTS.md - authoritative)\n{_AGENTS_MD}\n"
+    f'\n\n# PROJECT RULES (AGENTS.md - authoritative)\n{_AGENTS_MD}\n'
     if _AGENTS_MD
-    else ""
+    else ''
 )
 
 SYSTEM_PM_NEXT = """Return ONLY valid JSON:

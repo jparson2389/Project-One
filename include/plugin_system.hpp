@@ -1,55 +1,59 @@
+// This file defines the C-ABI plugin lifecycle and capability contract.
+// Frozen after Phase 0 completion.
+
 #ifndef PLUGIN_SYSTEM_HPP
 #define PLUGIN_SYSTEM_HPP
 
+#include <cstdint>
 #include <string>
-#include <vector>
 
-// Forward declarations (replace with actual includes as needed)
-class Services;
-class Profile;
+struct Services;
+struct Profile;
 
-// Plugin Lifecycle Methods
-typealias InitializeFn = void (*)(Services*);
-struct PluginLifecycle {
-    InitializeFn initialize;
-    typealias StartFn = void (*)(Profile*);
-    StartFn start;
-    typealias StopFn = void (*); 
-    StopFn stop;
-    typealias ShutdownFn = void (*);
-    ShutdownFn shutdown;
+enum class PluginType {
+    INPUT_PROVIDER,
+    OUTPUT_PROVIDER,
+    CAPTURE_PROVIDER,
+    DISPLAY_PANEL,
+    INFERENCE_ENGINE,
+    SCRIPTING_ENGINE,
+    REMOTE_PLAY_INTEGRATION,
+    ONLINE_RESOURCES_CLIENT,
+    ENVIRONMENT_MANAGER,
+    ADMIN_DASHBOARD,
+    BRIDGE_PLUGIN
 };
 
-// Plugin Capabilities (example - expand as needed)
-struct Capability {
+struct PluginIdentity {
+    std::string plugin_id;
     std::string name;
     std::string version;
-}
-
-//Plugin Identity
-struct PluginIdentity{
-  std::string plugin_id;
-  std::string name;
-  std::string version;
-  std::string api_version;
-  std::string plugin_type;
+    uint32_t api_version;
+    PluginType plugin_type;
 };
 
-// Plugin Policy (example - expand as needed)
+struct Capability {
+    std::string name;
+    std::string description;
+};
+
 struct PluginPolicy {
     std::vector<std::string> required_entitlements;
     std::vector<std::string> requires_drivers;
     bool requires_worker;
 };
 
-//Plugin Capabilities Function
-typealias GetCapabilitiesFn = std::vector<Capability>* (*)(void);
+class IPlugin {
+public:
+    virtual ~IPlugin() = default;
 
-struct PluginExport {
-  PluginIdentity identity;
-  PluginLifecycle lifecycle;
-  GetCapabilitiesFn get_capabilities;
-  PluginPolicy policy;
+    virtual PluginIdentity GetIdentity() const = 0;
+    virtual void Initialize(Services* services) = 0;
+    virtual void Start(Profile* profile) = 0;
+    virtual void Stop() = 0;
+    virtual void Shutdown() = 0;
+    virtual std::vector<Capability> GetCapabilities() const = 0;
+    virtual PluginPolicy GetPolicy() const = 0;
 };
 
 #endif // PLUGIN_SYSTEM_HPP

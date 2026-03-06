@@ -20,21 +20,21 @@ class WriteEntry(BaseModel):
     path: str
     content: str
 
-    @field_validator("content")
+    @field_validator('content')
     @classmethod
     def no_triple_double_quotes(cls, v: str) -> str:
-        '''Warn if content contains triple-double-quoted docstrings.'''
+        """Warn if content contains triple-double-quoted docstrings."""
         if '"""' in v:
             logger.warning(
                 'content contains triple-double-quoted docstring ("""). '
-                "Use ONLY single-quoted docstrings: '''Google-style docstring.'''."
+                'Use ONLY single-quoted docstrings with meaningful content.'
             )
         return v
 
 
 class WritesPayload(BaseModel):
     writes: list[WriteEntry]
-    notes: str = ""
+    notes: str
 
 
 # ── Data models (Pydantic v2) ────────────────────────────────────────────────
@@ -61,7 +61,7 @@ class ValidationReport(BaseModel):
 # ── Layer 1: Filesystem existence ────────────────────────────────────────────
 
 _TARGET_FILE_RE = re.compile(
-    r"\*\*Target Files?:\*\*\s*`([^`]+)`",
+    r'\*\*Target Files?:\*\*\s*`([^`]+)`',
     re.IGNORECASE,
 )
 
@@ -89,7 +89,7 @@ def check_filesystem_existence(
             evidence=changed_files,
             errors=[]
             if changed_files
-            else ["No files were written and no Target File declared."],
+            else ['No files were written and no Target File declared.'],
         )
 
     changed_set = {Path(p).as_posix() for p in changed_files}
@@ -103,7 +103,7 @@ def check_filesystem_existence(
         elif Path(rel).as_posix() in changed_set:
             evidence.append(rel)  # was written this run
         else:
-            errors.append(f"MISSING: {rel}")
+            errors.append(f'MISSING: {rel}')
 
     return GateResult(
         layer=1,
@@ -116,7 +116,7 @@ def check_filesystem_existence(
 # ── Layer 2: Validation command ──────────────────────────────────────────────
 
 _VALIDATION_RE = re.compile(
-    r"\*\*Validation:\*\*[^\n]*\n\s*`([^`]+)`",
+    r'\*\*Validation:\*\*[^\n]*\n\s*`([^`]+)`',
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -157,13 +157,13 @@ def run_validation_command(
         return GateResult(
             layer=2,
             passed=False,
-            errors=[f"Validation command timed out after {timeout}s: {command}"],
+            errors=[f'Validation command timed out after {timeout}s: {command}'],
         )
     except Exception as exc:
         return GateResult(
             layer=2,
             passed=False,
-            errors=[f"Validation command raised exception: {exc}"],
+            errors=[f'Validation command raised exception: {exc}'],
         )
 
 

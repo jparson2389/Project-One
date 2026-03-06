@@ -19,27 +19,27 @@ def export_mermaid_diagrams(input_path: str, output_path: str) -> None:
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     command = [
-        "mmdc",
-        "-i",
+        'mmdc',
+        '-i',
         str(input_file),
-        "-o",
+        '-o',
         str(output_file),
-        "-b",
-        "transparent",
+        '-b',
+        'transparent',
     ]
 
     try:
-        logger.info(f"Exporting diagrams from {input_file} to {output_file}...")
+        logger.info(f'Exporting diagrams from {input_file} to {output_file}...')
         subprocess.run(command, check=True, capture_output=True, text=True)
-        logger.success("Export completed successfully.")
+        logger.success('Export completed successfully.')
     except subprocess.CalledProcessError as e:
-        logger.error(f"Failed to export diagrams: {e.stderr}")
+        logger.error(f'Failed to export diagrams: {e.stderr}')
     except FileNotFoundError:
-        logger.error("Mermaid CLI (mmdc) not found. Ensure it is installed via npm.")
+        logger.error('Mermaid CLI (mmdc) not found. Ensure it is installed via npm.')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     export_mermaid_diagrams(
-        input_path="docs/architecture/system-overview.md",
-        output_path="assets/architecture/system-overview.png",
+        input_path='docs/architecture/system-overview.md',
+        output_path='assets/architecture/system-overview.png',
     )

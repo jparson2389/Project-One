@@ -1,26 +1,28 @@
 {
   "version": 1,
-  "updated_at": "2026-03-05T05:07:59",
+  "updated_at": "2026-03-06T10:09:59",
   "items": [
     {
       "id": "phase_0__freeze_plugin_abi_contract",
       "phase": "Phase 0",
       "title": "Freeze plugin ABI contract",
       "instructions": "**Target File:** `include/plugin_system.hpp`\n**Behavior:** C-ABI plugin lifecycle and capability contract. Frozen.\n**Validation:** `uv run pytest tests/test_plugin_abi.py -vv`\n**Evidence:** File exists at `include/plugin_system.hpp`\n**ARP Trigger:** Any modification to this file requires a breaking-change\nlog entry at `docs/breaking-changes/abi.md` before proceeding.",
-      "status": "in_progress",
+      "status": "done",
       "notes": "Execution started",
-      "updated_at": "2026-03-05T05:07:59",
+      "updated_at": "2026-03-06T07:03:02",
       "missing": [],
-      "evidence": []
+      "evidence": [
+        "include\\plugin_system.hpp"
+      ]
     },
     {
       "id": "phase_0__freeze_grpc_capture_proto",
       "phase": "Phase 0",
       "title": "Freeze gRPC capture proto",
       "instructions": "**Target File:** `proto/capture.proto`\n**Output Files:** `src/aetherlink/proto/capture_pb2.py`,\n`src/aetherlink/proto/capture_pb2_grpc.py`\n**Behavior:** Control-plane gRPC contract for worker management. Frozen.\n**Validation:**\n`uv run python -m grpc_tools.protoc -I proto/ --python_out=src/aetherlink/proto/ --grpc_python_out=src/aetherlink/proto/ proto/capture.proto`\n**Evidence:** Both pb2 files exist and import without errors.\n**ARP Trigger:** Report exact protoc error before any fix attempt.",
-      "status": "missing",
-      "notes": "",
-      "updated_at": "2026-03-05T04:42:21",
+      "status": "done",
+      "notes": "Execution completed",
+      "updated_at": "2026-03-06T07:16:01",
       "missing": [],
       "evidence": []
     },
@@ -29,8 +31,8 @@
       "phase": "Phase 0",
       "title": "Define shared memory layout contract",
       "instructions": "**Target File:** `src/aetherlink/core/shared_memory_layout.py`\n**Test File:** `tests/test_shared_memory_layout.py`\n**Behavior:** Deterministic 64-byte-aligned ring buffer layout. Frozen.\n**Validation:** `uv run pytest tests/test_shared_memory_layout.py -vv`\n**Evidence:** All layout offset and alignment assertions pass.\n**ARP Trigger:** Report the failing offset assertion and expected vs actual\nvalues before any fix attempt.",
-      "status": "missing",
-      "notes": "",
+      "status": "done",
+      "notes": "Execution completed",
       "updated_at": "2026-03-05T04:42:21",
       "missing": [],
       "evidence": []
@@ -40,11 +42,16 @@
       "phase": "Phase 0",
       "title": "Implement Python plugin ABI mirror",
       "instructions": "**Preconditions:** `[ABI-FRZ-01]` complete\n**Target File:** `src/aetherlink/plugins/plugin_interface.py`\n**Test File:** `tests/test_plugin_interface.py`\n**Behavior:** Python ABC mirroring the C-ABI contract from\n`include/plugin_system.hpp`. Must define: `initialize`, `start`, `stop`,\n`shutdown`, `get_capabilities`, `required_entitlements`, `requires_worker`.\nInstantiating the ABC directly must raise `TypeError`.\n**Validation:** `uv run pytest tests/test_plugin_interface.py -vv`\n**Evidence:** ABC enforcement test passes; all abstract methods verified.\n**ARP Trigger:** Report which abstract method is missing or has the wrong\nsignature before any fix attempt.",
-      "status": "missing",
-      "notes": "",
-      "updated_at": "2026-03-05T04:42:21",
-      "missing": [],
-      "evidence": []
+      "status": "blocked",
+      "notes": "Quality failing",
+      "updated_at": "2026-03-06T10:09:59",
+      "missing": [
+        "Quality"
+      ],
+      "evidence": [
+        "src\\aetherlink\\plugins\\plugin_interface.py",
+        "src\\aetherlink\\plugins\\plugin_interface.py"
+      ]
     },
     {
       "id": "phase_0__implement_plugin_loader",
@@ -124,13 +131,24 @@
       "evidence": []
     },
     {
-      "id": "phase_2__deliver_opencv_capture_plugin",
+      "id": "phase_2__deliver_opencv_capture_plugin_contract",
       "phase": "Phase 2",
-      "title": "Deliver OpenCV capture plugin",
-      "instructions": "**Preconditions:** `[IPC-SHM-01]`, `[ABI-PY-01]` complete\n**Target File:** `src/aetherlink/plugins/capture/opencv_capture.py`\n**Test File:** `tests/test_opencv_capture.py`\n**Behavior:** `PluginInterface` subclass. `get_capabilities()` returns a\nvalid mode matrix with `capture_width`, `capture_height`, `capture_fps`,\n`pixel_format_in`, `pixel_format_out`, `zero_copy_supported`,\n`hdr_supported`. Device enumeration returns stable identifiers.\n**Validation:** `uv run pytest tests/test_opencv_capture.py -vv`\n**Evidence:** Mode matrix schema assertions pass.\n**ARP Trigger:** Report which mode matrix field is missing or has the\nwrong type before any fix attempt.",
+      "title": "Deliver OpenCV capture plugin contract",
+      "instructions": "**Preconditions:** `[IPC-SHM-01]`, `[ABI-FRZ-01]` complete\n**Target File (Python):** `src/aetherlink/vision/cv_capture.py`\n**Target File (Native):** `host/plugins/cv_capture.cpp`\n**Test File:** `tests/test_cv_capture.py`\n**Behavior:** Native/Python capture contract + shared memory mapping\n**Command:** `uv run pytest tests/test_cv_capture.py -vv`\n**Validation:** Exit 0\n**Evidence:** `get_mode_matrix()` typed list return\n**ARP Trigger:** Report signature mismatch details",
       "status": "missing",
       "notes": "",
-      "updated_at": "2026-03-05T04:42:21",
+      "updated_at": "2026-03-06T06:55:11",
+      "missing": [],
+      "evidence": []
+    },
+    {
+      "id": "phase_2__implement_capability_matrix_filtering_contract",
+      "phase": "Phase 2",
+      "title": "Implement capability matrix filtering contract",
+      "instructions": "**Preconditions:** `[CAP-OCV-01]` complete\n**Target Files:** `host/capability_matrix_filtering.cpp`,\n`include/capability_matrix_filtering.h`\n**Test File:** `tests/test_capability_matrix.cpp`\n**Behavior:** Reject invalid capability schemas\n**Command:** `g++ -std=c++20 tests/test_capability_matrix.cpp -I include/ && ./a.out`\n**Validation:** Exit 0\n**Evidence:** compile clean + assertions pass\n**ARP Trigger:** Report exact g++ error before fix",
+      "status": "missing",
+      "notes": "",
+      "updated_at": "2026-03-06T06:55:11",
       "missing": [],
       "evidence": []
     },

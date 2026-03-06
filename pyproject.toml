@@ -59,11 +59,12 @@ ignore = [
     "E203",
     "D203",
     "D213", # pick ONE of D212/D213; keep D212 behavior + silence warning
+    "D300", # allow single-quoted docstrings
 ]
 
 [tool.ruff.format]
 docstring-code-line-length = 60
-quote-style = "double"
+quote-style = "single"
 indent-style = "space"
 
 [tool.ruff.lint.isort]
@@ -74,3 +75,7 @@ combine-as-imports = true
 "tools/**/*.py" = ["D", "T201"]
 "tests/**/*.py" = ["D"]
 "src/**/__init__.py" = ["D104"]
+
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = "single"
+docstring-quotes = "single"
