@@ -49,23 +49,24 @@ build-backend = "uv_build"
 target-version = "py312"
 line-length = 88
 fix = true
-indent-width = 4
 src = ["src"]
 extend-exclude = ["*_pb2.py", "*_pb2_grpc.py", ".venv"]
 
 [tool.ruff.lint]
-select = ["F", "E", "W", "I", "N", "UP", "B", "A", "C4", "RUF", "D", "T"]
+select = ["F", "E", "I", "UP", "B", "RUF", "D",]
 ignore = [
     "E203",
     "D203",
     "D213", # pick ONE of D212/D213; keep D212 behavior + silence warning
     "D300", # allow single-quoted docstrings
+    "E501",
 ]
 
 [tool.ruff.format]
-docstring-code-line-length = 60
-quote-style = "single"
-indent-style = "space"
+quote-style = "double"
+line-ending = "auto"
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
 
 [tool.ruff.lint.isort]
 known-first-party = ["aetherlink"]

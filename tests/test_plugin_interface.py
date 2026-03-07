@@ -21,10 +21,10 @@ class DummyPlugin(PluginInterface):
         pass
 
     def get_capabilities(self) -> dict:
-        return {'test': True}
+        return {"test": True}
 
     def required_entitlements(self) -> list:
-        return ['test_entitlement']
+        return ["test_entitlement"]
 
     def requires_worker(self) -> bool:
         return False

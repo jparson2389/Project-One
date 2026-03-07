@@ -53,17 +53,17 @@ def normalize_docstring_quotes(content: str) -> str:
         result.append(content[last_end:])
     except tokenize.TokenError:
         return content
-    return ''.join(result)
+    return "".join(result)
 
 
 class WriteEntry(BaseModel):
     path: str
     content: str
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def normalize_py_docstrings(self) -> WriteEntry:
         """Transform triple-double-quoted docstrings to triple-single in .py."""
-        if self.path.endswith('.py') and '"""' in self.content:
+        if self.path.endswith(".py") and '"""' in self.content:
             self.content = normalize_docstring_quotes(self.content)
         return self
 
@@ -97,7 +97,7 @@ class ValidationReport(BaseModel):
 # ── Layer 1: Filesystem existence ────────────────────────────────────────────
 
 _TARGET_FILE_RE = re.compile(
-    r'\*\*Target Files?:\*\*\s*`([^`]+)`',
+    r"\*\*Target Files?:\*\*\s*`([^`]+)`",
     re.IGNORECASE,
 )
 
@@ -125,7 +125,7 @@ def check_filesystem_existence(
             evidence=changed_files,
             errors=[]
             if changed_files
-            else ['No files were written and no Target File declared.'],
+            else ["No files were written and no Target File declared."],
         )
 
     changed_set = {Path(p).as_posix() for p in changed_files}
@@ -139,7 +139,7 @@ def check_filesystem_existence(
         elif Path(rel).as_posix() in changed_set:
             evidence.append(rel)  # was written this run
         else:
-            errors.append(f'MISSING: {rel}')
+            errors.append(f"MISSING: {rel}")
 
     return GateResult(
         layer=1,
@@ -152,7 +152,7 @@ def check_filesystem_existence(
 # ── Layer 2: Validation command ──────────────────────────────────────────────
 
 _VALIDATION_RE = re.compile(
-    r'\*\*Validation:\*\*[^\n]*\n\s*`([^`]+)`',
+    r"\*\*Validation:\*\*[^\n]*\n\s*`([^`]+)`",
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -193,13 +193,13 @@ def run_validation_command(
         return GateResult(
             layer=2,
             passed=False,
-            errors=[f'Validation command timed out after {timeout}s: {command}'],
+            errors=[f"Validation command timed out after {timeout}s: {command}"],
         )
     except Exception as exc:
         return GateResult(
             layer=2,
             passed=False,
-            errors=[f'Validation command raised exception: {exc}'],
+            errors=[f"Validation command raised exception: {exc}"],
         )
 
 

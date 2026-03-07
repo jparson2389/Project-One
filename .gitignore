@@ -77,8 +77,6 @@ secrets.json
 # But DO track these specific ones
 !README.txt
 !LICENSE.txt
-.codex/
-.agents/
 
 # --- Windows System Files ---
 [Dd]esktop.ini
@@ -98,6 +96,8 @@ UPDATE.md
 Layout-Endgoal.txt
 .tmp.drivedownload/
 .tmp.driveupload/
+start-loop.ps1
+repo_audit_clean.txt
 
 # Ignore a specific file inside a subfolder
 docs/commands.md

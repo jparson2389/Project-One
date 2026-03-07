@@ -26,7 +26,7 @@ def test_normalize_docstring_quotes_preserves_single_quoted() -> None:
 
 def test_normalize_docstring_quotes_skips_inner_triple_single() -> None:
     """Tokens with triple-single inside are not transformed."""
-    content = '"""He said \'\'\'hi\'\'\'"""\n'
+    content = "\"\"\"He said '''hi'''\"\"\"\n"
     result = normalize_docstring_quotes(content)
     assert '"""' in result
     assert "'''" in result
@@ -37,11 +37,11 @@ def test_write_entry_normalizes_py_content() -> None:
     payload = WritesPayload(
         writes=[
             {
-                'path': 'tests/sample.py',
-                'content': 'def bar():\n    """Doc."""\n    return 1\n',
+             "path": "tests/sample.py",
+            "content": 'def bar():\n    """Doc."""\n    return 1\n',
             },
         ],
-        notes='',
+        notes="",
     )
     entry = payload.writes[0]
     assert "'''Doc.'''" in entry.content
@@ -53,11 +53,11 @@ def test_write_entry_ignores_non_py() -> None:
     payload = WritesPayload(
         writes=[
             {
-                'path': 'docs/readme.md',
-                'content': 'Some """quoted""" text.\n',
+                "path": "docs/readme.md",
+                "content": 'Some """quoted""" text.\n',
             },
         ],
-        notes='',
+        notes="",
     )
     entry = payload.writes[0]
     assert '"""quoted"""' in entry.content
@@ -68,19 +68,19 @@ def test_apply_writes_uses_transformed_content(tmp_path) -> None:
     from tools.apply_writes import apply_writes
 
     payload = {
-        'writes': [
+        "writes": [
             {
-                'path': 'tests/sample_out.py',
-                'content': 'def x():\n    """Doc."""\n    pass\n',
+                "path": "tests/sample_out.py",
+                "content": 'def x():\n    """Doc."""\n    pass\n',
             },
         ],
-        'notes': '',
+        "notes": "",
     }
-    repo = tmp_path / 'repo'
+    repo = tmp_path / "repo"
     repo.mkdir()
-    (repo / 'tests').mkdir()
+    (repo / "tests").mkdir()
     changed = apply_writes(repo, payload)
     assert len(changed) == 1
-    written = changed[0].read_text(encoding='utf-8')
+    written = changed[0].read_text(encoding="utf-8")
     assert "'''Doc.'''" in written
     assert '"""' not in written

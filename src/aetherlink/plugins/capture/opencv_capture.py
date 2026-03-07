@@ -23,11 +23,11 @@ class OpenCVCapturePlugin:
     def get_capabilities(self):
         """Get plugin capabilities."""
         return {
-            'capture_width': 1920,
-            'capture_height': 1080,
-            'capture_fps': 60,
-            'pixel_format_in': 'NV12',
-            'pixel_format_out': 'BGR',
+            "capture_width": 1920,
+            "capture_height": 1080,
+            "capture_fps": 60,
+            "pixel_format_in": "NV12",
+            "pixel_format_out": "BGR",
         }
 
     def required_entitlements(self):

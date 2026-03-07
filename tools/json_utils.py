@@ -11,28 +11,28 @@ from typing import Any
 from loguru import logger
 
 WRITES_RESPONSE_FORMAT: dict = {
-    'type': 'json_schema',
-    'json_schema': {
-        'name': 'writes_response',
-        'strict': True,
-        'schema': {
-            'type': 'object',
-            'required': ['writes', 'notes'],
-            'additionalProperties': False,
-            'properties': {
-                'writes': {
-                    'type': 'array',
-                    'items': {
-                        'type': 'object',
-                        'required': ['path', 'content'],
-                        'additionalProperties': False,
-                        'properties': {
-                            'path': {'type': 'string'},
-                            'content': {'type': 'string'},
+    "type": "json_schema",
+    "json_schema": {
+        "name": "writes_response",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "required": ["writes", "notes"],
+            "additionalProperties": False,
+            "properties": {
+                "writes": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["path", "content"],
+                        "additionalProperties": False,
+                        "properties": {
+                            "path": {"type": "string"},
+                            "content": {"type": "string"},
                         },
                     },
                 },
-                'notes': {'type': 'string'},
+                "notes": {"type": "string"},
             },
         },
     },
@@ -42,7 +42,7 @@ WRITES_RESPONSE_FORMAT: dict = {
 def _extract_fenced_json(text: str) -> str | None:
     """Return the content of the first ```json...``` fence, if any."""
     match = re.search(
-        r'```(?:json)?\s*(\{.*?\})\s*```', text, re.IGNORECASE | re.DOTALL
+        r"```(?:json)?\s*(\{.*?\})\s*```", text, re.IGNORECASE | re.DOTALL
     )
     if match:
         return match.group(1).strip()
@@ -60,7 +60,7 @@ def _extract_first_json_object(text: str) -> str | None:
         if in_string:
             if escape:
                 escape = False
-            elif ch == '\\':
+            elif ch == "\\":
                 escape = True
             elif ch == '"':
                 in_string = False
@@ -68,11 +68,11 @@ def _extract_first_json_object(text: str) -> str | None:
         if ch == '"':
             in_string = True
             continue
-        if ch == '{':
+        if ch == "{":
             if depth == 0:
                 start = idx
             depth += 1
-        elif ch == '}' and depth > 0:
+        elif ch == "}" and depth > 0:
             depth -= 1
             if depth == 0 and start >= 0:
                 return text[start : idx + 1].strip()
@@ -83,7 +83,7 @@ def _extract_first_json_object(text: str) -> str | None:
 def parse_json_object(
     raw: str,
     *,
-    stage: str = 'unknown',
+    stage: str = "unknown",
     dump_on_failure: str | None = None,
 ) -> dict[str, Any]:
     """Try to parse a JSON object from raw text using three strategies:
@@ -103,23 +103,23 @@ def parse_json_object(
     text = raw.strip()
     candidates: list[tuple[str, str]] = []
     if text:
-        candidates.append(('direct', text))
+        candidates.append(("direct", text))
     fenced = _extract_fenced_json(text)
     if fenced:
-        candidates.append(('fenced', fenced))
+        candidates.append(("fenced", fenced))
     first_obj = _extract_first_json_object(text)
     if first_obj:
-        candidates.append(('first_object', first_obj))
+        candidates.append(("first_object", first_obj))
     for strategy, candidate in candidates:
         try:
             payload = json.loads(candidate)
         except json.JSONDecodeError:
             continue
         if isinstance(payload, dict):
-            logger.debug(f'[parse] stage={stage} status=ok strategy={strategy}')
+            logger.debug(f"[parse] stage={stage} status=ok strategy={strategy}")
             return payload
 
-    logger.debug(f'[parse] stage={stage} status=failed')
+    logger.debug(f"[parse] stage={stage} status=failed")
     raise ValueError(f"Could not parse valid JSON object for stage '{stage}'.")
 
 

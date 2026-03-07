@@ -1,4 +1,5 @@
 """Service container module for Aetherlink host services."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -25,7 +26,7 @@ class ServiceContainer:
             instance: The service object to register.
 
         """
-        logger.debug(f'Registering service: {name}')
+        logger.debug(f"Registering service: {name}")
         self._services[name] = instance
 
     def get(self, name: str) -> Any:
@@ -42,5 +43,5 @@ class ServiceContainer:
 
         """
         if name not in self._services:
-            raise KeyError(f'Service not found: {name!r}')
+            raise KeyError(f"Service not found: {name!r}")
         return self._services[name]

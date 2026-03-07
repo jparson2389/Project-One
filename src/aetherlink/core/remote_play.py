@@ -39,9 +39,9 @@ class RemotePlayPlugin:
 
         """
         return {
-            'plugin_id': 'remote_play',
-            'name': 'Remote Play Plugin',
-            'version': '1.0',
-            'api_version': '1.0',
-            'plugin_type': 'Remote-play integrations',
+            "plugin_id": "remote_play",
+            "name": "Remote Play Plugin",
+            "version": "1.0",
+            "api_version": "1.0",
+            "plugin_type": "Remote-play integrations",
         }
