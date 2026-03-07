@@ -8,6 +8,7 @@ import json
 import re
 from typing import Any
 
+import requests
 from loguru import logger
 
 WRITES_RESPONSE_FORMAT: dict = {
@@ -37,6 +38,36 @@ WRITES_RESPONSE_FORMAT: dict = {
         },
     },
 }
+
+
+def get_structured_plan(prompt: str) -> str:
+    """
+    Requests a plan from the 4080 Super backend using GBNF grammar.
+    
+    Args:
+        prompt: The user instruction.
+        
+    Returns:
+        A strictly formatted string from the model.
+    """
+    # GBNF for a simple JSON list of steps
+    grammar: str = r'''
+        root   ::= "{" space "\"steps\":" space "[" space list space "]" space "}"
+        list   ::= item ("," space item)*
+        item   ::= "\"" [^\"]* "\""
+        space  ::= [ \t\n\r]*
+    '''
+    
+    payload: dict[str, Any] = {
+        "prompt": prompt,
+        "grammar": grammar,
+        "stream": False
+    }
+    
+    logger.info("Sending request with GBNF enforcement...")
+    response = requests.post("http://localhost:8080/completion", json=payload)
+    
+    return response.json()["content"]
 
 
 def _extract_fenced_json(text: str) -> str | None:

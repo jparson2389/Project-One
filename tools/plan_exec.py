@@ -67,6 +67,21 @@ except ModuleNotFoundError:  # pragma: no cover
     )
 
 try:
+    from tools.gbnf_grammars import (
+        GBNF_PM_NEXT,
+        GBNF_PM_VERIFY,
+        GBNF_WRITES,
+        is_local_backend,
+    )
+except ModuleNotFoundError:  # pragma: no cover
+    from gbnf_grammars import (  # type: ignore[no-redef]
+        GBNF_PM_NEXT,
+        GBNF_PM_VERIFY,
+        GBNF_WRITES,
+        is_local_backend,
+    )
+
+try:
     from tools.apply_writes import (  # type: ignore
         ALLOWED_ROOT_FILES,
         ALLOWED_WRITE_PREFIXES,
@@ -87,6 +102,7 @@ except ModuleNotFoundError:  # pragma: no cover
 # Internal helpers for evidence extraction
 # ---------------------------------------------------------------------------
 
+
 def _gather_gate_evidence(report: Any) -> list[str]:
     """Flatten evidence and error messages from a ValidationReport into a list.
 
@@ -105,6 +121,7 @@ def _gather_gate_evidence(report: Any) -> list[str]:
     except Exception:
         pass
     return items
+
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE_PATH = ROOT / "state" / "plan_state.json"
@@ -307,7 +324,11 @@ def infer_agent_from_instructions(instructions: str, title: str) -> str:
             return "ui-ux"
         return "architect"
     # Fallback: ui-ux for unambiguous UI titles
-    return "ui-ux" if re.search(r"\bui\b|\bpanel\b|\bdashboard\b", title.lower()) else "architect"
+    return (
+        "ui-ux"
+        if re.search(r"\bui\b|\bpanel\b|\bdashboard\b", title.lower())
+        else "architect"
+    )
 
 
 _PHASE_HEADER_RE = re.compile(
@@ -466,7 +487,9 @@ def next_open_work_items(state: dict[str, Any]) -> tuple[str, list[dict[str, Any
         return "", []
 
     open_items = [
-        item for item in items if isinstance(item, dict) and item.get("status") != "done"
+        item
+        for item in items
+        if isinstance(item, dict) and item.get("status") != "done"
     ]
     if not open_items:
         return "", []
@@ -582,6 +605,7 @@ def call(
     user: str,
     temperature: float | None = None,
     response_format: Any = None,
+    grammar: str | None = None,
 ) -> ModelCall:
     """Invoke an LLM and return the raw model response."""
     kwargs: dict[str, Any] = {
@@ -592,7 +616,10 @@ def call(
             {"role": "user", "content": user},
         ],
     }
-    if response_format is not None:
+    base_url = str(getattr(client, "base_url", ""))
+    if grammar and is_local_backend(base_url):
+        kwargs["extra_body"] = {"grammar": grammar}
+    elif response_format is not None:
         kwargs["response_format"] = response_format
     resp = client.chat.completions.create(**kwargs)
     content = (resp.choices[0].message.content or "").strip()
@@ -622,12 +649,17 @@ def call_json_with_retry(
     schema_hint: str,
     temperature: float | None = None,
     response_format: dict | None = None,
+    grammar: str | None = None,
 ) -> dict[str, Any]:
-    """
-    Invoke an LLM expecting a JSON response. If the first response fails to
-    parse, send a repair prompt. Raise ValueError if both attempts fail.
+    """Invoke an LLM expecting a JSON response.
+
+    When *grammar* is provided and the backend is local, GBNF token-level
+    enforcement is used instead of ``response_format``.  If the first
+    response fails to parse, a repair prompt is sent.  Raises ValueError
+    if both attempts fail.
     """
     from pathlib import Path as _Path  # avoid conflict with outer Path
+
     debug_dir = _Path("logs")
     debug_dir.mkdir(exist_ok=True)
     safe_stage = stage.replace("/", "_").replace("\\", "_")
@@ -641,6 +673,7 @@ def call_json_with_retry(
         user,
         temperature=temperature,
         response_format=response_format,
+        grammar=grammar,
     )
     logger.debug(
         f"[llm] stage={stage} requested_alias={initial.requested_model} "
@@ -674,6 +707,7 @@ def call_json_with_retry(
         repair_user,
         temperature=None,
         response_format=response_format,
+        grammar=grammar,
     )
     logger.debug(
         f"[llm] stage={stage} retry=1 requested_alias={repaired.requested_model} "
@@ -712,9 +746,7 @@ def _title_keywords(title: str) -> set[str]:
 def filter_acceptance_criteria(title: str, acceptance: list[Any]) -> list[str]:
     """Filter acceptance criteria to only those relevant to the title keywords."""
     criteria = [
-        item.strip()
-        for item in acceptance
-        if isinstance(item, str) and item.strip()
+        item.strip() for item in acceptance if isinstance(item, str) and item.strip()
     ]
     if not criteria:
         return [f"Complete PLAN work item: {title}"]
@@ -942,6 +974,7 @@ def main(argv: list[str] | None = None) -> int:
             schema_hint=SCHEMA_PM_NEXT,
             temperature=None,
             response_format={"type": "text"},
+            grammar=GBNF_PM_NEXT,
         )
     except ValueError as exc:
         logger.error(f"PM next selection failed to return valid JSON: {exc}")
@@ -996,11 +1029,14 @@ def main(argv: list[str] | None = None) -> int:
         raw_acceptance = [f"Complete PLAN work item: {selected_title}"]
 
     # Fetch requirements for the final selected title
-    selected_requirements = str(
-        open_items_by_id.get(selected_id, {}).get(
-            "instructions", "No specific requirements provided in PLAN.md."
-        )
-    ).strip() or "No specific requirements provided in PLAN.md."
+    selected_requirements = (
+        str(
+            open_items_by_id.get(selected_id, {}).get(
+                "instructions", "No specific requirements provided in PLAN.md."
+            )
+        ).strip()
+        or "No specific requirements provided in PLAN.md."
+    )
 
     # Log selected task for human visibility
     logger.info("=" * 40)
@@ -1078,6 +1114,7 @@ def main(argv: list[str] | None = None) -> int:
                     schema_hint=SCHEMA_HINT_IMPL,
                     temperature=None,
                     response_format=WRITES_RESPONSE_FORMAT,
+                    grammar=GBNF_WRITES,
                 )
             except ValueError as exc:
                 # JSON parse failure is fatal; mark blocked
@@ -1121,8 +1158,9 @@ def main(argv: list[str] | None = None) -> int:
                         if failure_kind == "writes_schema_fail":
                             fix_prompt = (
                                 "Your JSON writes payload was rejected by schema validation.\n"
-                                "Return a JSON object with a top-level 'writes' array of write "
-                                "entries and an optional 'notes' string.\n"
+                                "Return a JSON object with exactly two top-level keys:\n"
+                                '- "writes": array of {{"path": "...", "content": "..."}} entries\n'
+                                '- "notes": REQUIRED string summarising the changes\n'
                                 f"Error: {exc2}\n"
                                 "Return corrected JSON writes only."
                             )
@@ -1338,7 +1376,9 @@ def main(argv: list[str] | None = None) -> int:
             "title": selected_title,
             "acceptance": acceptance,
             "changed_files": changed,
-            "gate_layers": [layer.model_dump() for layer in gate_report.layers] if gate_report else [],
+            "gate_layers": [layer.model_dump() for layer in gate_report.layers]
+            if gate_report
+            else [],
         }
         verify_prompt = (
             "The physical validation gate has PASSED (files exist, test command returned 0).\n"
@@ -1361,7 +1401,8 @@ def main(argv: list[str] | None = None) -> int:
                 user=verify_prompt,
                 schema_hint=SCHEMA_PM_VERIFY,
                 temperature=None,
-                response_format={"type": "text"},
+                response_format=WRITES_RESPONSE_FORMAT,
+                grammar=GBNF_PM_VERIFY,
             )
         except ValueError as exc:
             # Could not parse JSON at all; mark as schema fail and try once
@@ -1374,7 +1415,9 @@ def main(argv: list[str] | None = None) -> int:
                 attempt += 1
                 continue
             else:
-                logger.error("Task Partial: PM verify returned invalid JSON on final attempt.")
+                logger.error(
+                    "Task Partial: PM verify returned invalid JSON on final attempt."
+                )
                 update_state_item(
                     state,
                     str(selected_id),
@@ -1401,11 +1444,19 @@ def main(argv: list[str] | None = None) -> int:
                     parsed_verdict = PMVerdict.model_validate(cleaned)
                 except Exception:
                     parsed_verdict = PMVerdict.model_validate(
-                        {"status": "fail", "missing": [], "notes": "Invalid verdict response"}
+                        {
+                            "status": "fail",
+                            "missing": [],
+                            "notes": "Invalid verdict response",
+                        }
                     )
             else:
                 parsed_verdict = PMVerdict.model_validate(
-                    {"status": "fail", "missing": [], "notes": "Invalid verdict response"}
+                    {
+                        "status": "fail",
+                        "missing": [],
+                        "notes": "Invalid verdict response",
+                    }
                 )
 
         # Evaluate verdict status
@@ -1417,7 +1468,7 @@ def main(argv: list[str] | None = None) -> int:
                 verify_retry_notes = (
                     "Previous PM verification returned fail.\n"
                     f"Notes: {notes}\n"
-                    f"Missing:\n{ '\n'.join(missing_list) }\n\n"
+                    f"Missing:\n{'\n'.join(missing_list)}\n\n"
                     "Re-evaluate the same changed files against only the listed "
                     "acceptance criteria.\n\n"
                 )

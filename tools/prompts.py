@@ -58,43 +58,51 @@ _AGENTS_MD = (
 # project-specific coding rules.  It is referenced by the plan executor when
 # requesting implementations or quick-fixes from the appropriate agent.
 SYSTEM_JSON_WRITES = f"""
-Return exactly one valid JSON object matching the required schema.
+Return exactly one valid JSON object with this EXACT structure:
+{{
+  "writes": [
+    {{"path": "src/aetherlink/example.py", "content": "file contents..."}}
+  ],
+  "notes": "one-sentence summary of changes"
+}}
+
+The top-level object MUST have exactly two keys: "writes" (array) and "notes" (string).
 Do not include markdown fences.
 Do not include prose before or after the JSON object.
-Do not include comments.
-Do not include extra keys.
+Do not include comments or extra keys.
 
 JSON RULES:
-- writes[i].content must contain complete file contents as a valid JSON string.
-- JSON escaping must be correct.
- - Prefer single-quoted Python strings and docstrings when practical.
- - Do NOT use Python triple-double-quoted docstrings.
- - Use ONLY single-quoted docstrings with meaningful content.
- - Docstring example: '''Summary line.''' (never triple-double-quotes)
+- "writes" is REQUIRED: an array of one or more write entries.
+- "notes" is REQUIRED: a string summarising the changes.
+- Each write entry has exactly "path" (string) and "content" (string).
+- writes[i].content must contain complete, valid JSON-escaped file contents.
+- Use single-quoted Python docstrings exclusively: '''Summary line.'''
 
-PYTHON CODING RULES (PEP 8 / Python 3.12):
- - Follow PEP 8 strictly.
-- Use type hinting for ALL function signatures.
- - Prefer pydantic v2 for data validation; asyncio for I/O-bound tasks.
- - Use ONLY single-quoted docstrings with meaningful content.
- - Use loguru logger - never print().
- - Use modern built-in generics and unions.
+PYTHON CODING RULES:
+- Follow PEP 8 strictly.
+- Use type hints on ALL function signatures.
+- Use single-quoted docstrings on all public functions.
+- Use pydantic v2 for data validation; asyncio for I/O-bound tasks.
+- Use ONLY single-quoted docstrings with meaningful content.
+- Use loguru logger for logging.
+- Use modern built-in generics and unions.
 
 PATH RULES (ENFORCED BY VALIDATOR - violations will be rejected):
- - ALL Python source under src/aetherlink/ - never src/plugins/.
- - C++ (.cpp/.h) NEVER inside src/ - use host/ or include/ only.
- - Do NOT create new top-level directories.
-- Allowed prefixes: {_ALLOWED_PREFIXES_STR}
-- Allowed root files: {_ALLOWED_ROOT_STR}
+- Place Python source ONLY under src/aetherlink/.
+- Place C++ (.cpp/.h) ONLY in host/ or include/.
+- Use only these allowed prefixes: {_ALLOWED_PREFIXES_STR}
+- Use only these allowed root files: {_ALLOWED_ROOT_STR}
 - Forbidden paths (hard block): {_DENIED_STR}
 - Forbidden placeholders (hard block): {_PLACEHOLDER_STR}
- - All paths must be repository-relative (never absolute).
+- Use repository-relative paths exclusively.
 """
 
 # Compose the full implementation system prompt.  Append the contents of
 # AGENTS.md if present to provide further project context.
 IMPL_SYSTEM = SYSTEM_JSON_WRITES + (
-    f"\n\n# PROJECT RULES (AGENTS.md - authoritative)\n{_AGENTS_MD}\n" if _AGENTS_MD else ""
+    f"\n\n# PROJECT RULES (AGENTS.md - authoritative)\n{_AGENTS_MD}\n"
+    if _AGENTS_MD
+    else ""
 )
 
 # ---------------------------------------------------------------------------
