@@ -7,29 +7,65 @@ Layer 3: LLM semantic review (existing pm_verify)
 
 from __future__ import annotations
 
+import io
 import re
 import subprocess
+import tokenize
 from dataclasses import field
 from pathlib import Path
 
-from loguru import logger
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, model_validator
+
+
+def normalize_docstring_quotes(content: str) -> str:
+    '''Convert triple-double-quoted STRING tokens to triple-single-quoted.
+
+    Only transforms tokens delimited by """. Never modifies existing
+    triple-single-quoted strings or raw text. Skips tokens whose inner
+    content contains triple-single-quotes to avoid corruption.
+    '''
+    if '"""' not in content:
+        return content
+    lines = content.splitlines(keepends=True)
+    if not lines:
+        return content
+
+    def offset(pos: tuple[int, int]) -> int:
+        line, col = pos
+        return sum(len(lines[i]) for i in range(line - 1)) + col
+
+    result: list[str] = []
+    last_end = 0
+    try:
+        for tok in tokenize.generate_tokens(io.StringIO(content).readline):
+            start_off = offset(tok.start)
+            end_off = offset(tok.end)
+            if tok.type == tokenize.STRING and tok.string.startswith('"""'):
+                inner = tok.string[3:-3]
+                if "'''" in inner:
+                    result.append(content[last_end:end_off])
+                else:
+                    result.append(content[last_end:start_off])
+                    result.append("'''" + inner + "'''")
+            else:
+                result.append(content[last_end:end_off])
+            last_end = end_off
+        result.append(content[last_end:])
+    except tokenize.TokenError:
+        return content
+    return ''.join(result)
 
 
 class WriteEntry(BaseModel):
     path: str
     content: str
 
-    @field_validator('content')
-    @classmethod
-    def no_triple_double_quotes(cls, v: str) -> str:
-        """Warn if content contains triple-double-quoted docstrings."""
-        if '"""' in v:
-            logger.warning(
-                'content contains triple-double-quoted docstring ("""). '
-                'Use ONLY single-quoted docstrings with meaningful content.'
-            )
-        return v
+    @model_validator(mode='after')
+    def normalize_py_docstrings(self) -> WriteEntry:
+        """Transform triple-double-quoted docstrings to triple-single in .py."""
+        if self.path.endswith('.py') and '"""' in self.content:
+            self.content = normalize_docstring_quotes(self.content)
+        return self
 
 
 class WritesPayload(BaseModel):

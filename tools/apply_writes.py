@@ -75,14 +75,10 @@ def is_write_path_allowed(path: str) -> bool:
     return any(p.startswith(prefix) for prefix in _ALLOWED_PREFIXES_NORM)
 
 
-def validate_writes_payload(payload: dict[str, Any]) -> None:
-    """Validate the writes payload using the Pydantic WritesPayload model.
+def validate_writes_payload(payload: dict[str, Any]) -> Any:
+    """Validate the writes payload and return the validated model.
 
-    Args:
-        payload: Raw dict from LLM JSON output.
-
-    Raises:
-        ValueError: If any write entry violates path or content rules.
+    The model has normalized content (e.g. docstring quotes) for .py files.
     """
     try:
         from validation_gate import WritesPayload
@@ -101,7 +97,7 @@ def validate_writes_payload(payload: dict[str, Any]) -> None:
             raise ValueError(f'Path traversal not allowed: {entry.path!r}')
         if not is_write_path_allowed(clean):
             raise ValueError(f'Path not in allowed locations: {entry.path!r}')
-    # Content may contain ''' (e.g. docstrings); canonical rule in tools/prompts.py.
+    return model
 
 
 def _safe_path(repo_root: Path, rel: str) -> Path:
@@ -113,13 +109,12 @@ def _safe_path(repo_root: Path, rel: str) -> Path:
 
 
 def apply_writes(repo_root: Path, payload: dict[str, Any]) -> list[Path]:
-    validate_writes_payload(payload)
-    writes = payload.get('writes', [])
+    model = validate_writes_payload(payload)
 
     changed: list[Path] = []
-    for w in writes:
-        path = str(w.get('path'))
-        content = str(w.get('content'))
+    for entry in model.writes:
+        path = entry.path.strip()
+        content = entry.content
 
         target = _safe_path(repo_root, path)
         target.parent.mkdir(parents=True, exist_ok=True)

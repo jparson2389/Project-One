@@ -233,23 +233,28 @@ def phase_number(phase: str) -> int:
     return int(match.group(1))
 
 
-def infer_agent_for_title(title: str) -> str:
-    lowered = title.lower()
-    if any(
-        token in lowered
-        for token in (
-            'abi',
-            'proto',
-            'contract',
-            'plugin',
-            'stub',
-            'capture',
-            'memory',
-            'layout',
-        )
-    ):
-        return 'architect'
-    return 'ui-ux'
+def infer_agent_from_instructions(instructions: str, title: str) -> str:
+    '''Derive agent from Target file path in PLAN.md instructions.
+
+    Args:
+        instructions: Parsed instruction block for the work item.
+        title: Work item title (fallback only).
+
+    Returns:
+        'ui-ux' if the target file is under a UI path, else 'architect'.
+    '''
+    match = re.search(r'\*\*Target Files?:\*\*s*`([^`]+)`', instructions)
+    if match:
+        path = match.group(1).lower()
+        if "/ui/" in path or "/panels/" in path:
+            return "ui-ux"
+        return "architect"
+    # Fallback: ui-ux for unambiguous UI titles
+    return (
+        'ui-ux'
+        if re.search(r'\bui\b|\bpanel\b|\bdashboard\b', title.lower())
+        else 'architect'
+    )
 
 
 _PHASE_HEADER_RE = re.compile(
@@ -846,7 +851,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     fallback_title = str(fallback_choice.get('title', '')).strip()
     selected_title = fallback_title
-    selected_agent = infer_agent_for_title(fallback_title)
+    selected_agent = infer_agent_from_instructions(
+        fallback_choice.get("instructions", ""), fallback_title
+    )
     raw_acceptance: list[Any] = []
     invalid_reason = ''
 
@@ -892,7 +899,9 @@ def main(argv: list[str] | None = None) -> int:
     fix_prompt: str = ''
     verdict: dict[str, Any] = {}
     changed: list[str] = []
-    parsed_verdict = PMVerdict.model_validate({'status': 'fail', 'notes': ''})
+    parsed_verdict = PMVerdict.model_validate(
+        {'status': 'fail', 'missing': [], 'notes': ''}
+    )
 
     for attempt in range(max_retries):
         logger.info(f'--- Implementation attempt {attempt + 1}/{max_retries} ---')
@@ -1164,7 +1173,11 @@ def main(argv: list[str] | None = None) -> int:
             parsed_verdict = PMVerdict.model_validate(verdict)
         except Exception:
             parsed_verdict = PMVerdict.model_validate(
-                {'status': 'fail', 'notes': 'Invalid verdict response'}
+                {
+                    'status': 'fail',
+                    'missing': [],
+                    'notes': 'Invalid verdict response',
+                }
             )
 
         if parsed_verdict.status != 'pass':

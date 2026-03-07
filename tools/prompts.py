@@ -39,6 +39,7 @@ JSON RULES:
 - Prefer single-quoted Python strings and docstrings when practical.
 - Do NOT use Python triple-double-quoted docstrings.
 - Use ONLY single-quoted docstrings with meaningful content.
+- Docstring example: '''Summary line.''' (never triple-double-quotes)
 
 PYTHON CODING RULES (PEP 8 / Python 3.12):
 - Follow PEP 8 strictly.
