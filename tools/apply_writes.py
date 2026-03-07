@@ -13,7 +13,6 @@ ALLOWED_WRITE_PREFIXES: tuple[str, ...] = (
     "src/aetherlink/",
     "include/",
     "host/",
-    "tools/",
     ".cursor/",
     ".github/",
     "proto/",

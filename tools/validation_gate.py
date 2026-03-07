@@ -151,16 +151,35 @@ def check_filesystem_existence(
 
 # ── Layer 2: Validation command ──────────────────────────────────────────────
 
-_VALIDATION_RE = re.compile(
-    r"\*\*Validation:\*\*[^\n]*\n\s*`([^`]+)`",
-    re.IGNORECASE | re.DOTALL,
+_INLINE_VALIDATION_RE = re.compile(
+    r"\*\*Validation:\*\*\s*`([^`]+)`",
+    re.IGNORECASE,
+)
+_MULTILINE_VALIDATION_RE = re.compile(
+    r"\*\*Validation:\*\*\s*\n\s*>?\s*`([^`]+)`",
+    re.IGNORECASE,
+)
+_COMMAND_RE = re.compile(
+    r"\*\*Command:\*\*\s*`([^`]+)`",
+    re.IGNORECASE,
 )
 
 
 def extract_validation_command(instructions: str) -> str | None:
     """Parse the **Validation:** shell command from a PLAN.md instruction block."""
-    m = _VALIDATION_RE.search(instructions)
-    return m.group(1).strip() if m else None
+    inline_match = _INLINE_VALIDATION_RE.search(instructions)
+    if inline_match:
+        return inline_match.group(1).strip()
+
+    multiline_match = _MULTILINE_VALIDATION_RE.search(instructions)
+    if multiline_match:
+        return multiline_match.group(1).strip()
+
+    command_match = _COMMAND_RE.search(instructions)
+    if command_match and re.search(r"\*\*Validation:\*\*\s*Exit\s+0", instructions):
+        return command_match.group(1).strip()
+
+    return None
 
 
 def run_validation_command(

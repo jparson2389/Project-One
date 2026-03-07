@@ -243,7 +243,7 @@ def infer_agent_from_instructions(instructions: str, title: str) -> str:
     Returns:
         'ui-ux' if the target file is under a UI path, else 'architect'.
     """
-    match = re.search(r"\*\*Target Files?:\*\*s*`([^`]+)`", instructions)
+    match = re.search(r"\*\*Target Files?:\*\s*`([^`]+)`", instructions)
     if match:
         path = match.group(1).lower()
         if "/ui/" in path or "/panels/" in path:
@@ -897,6 +897,7 @@ def main(argv: list[str] | None = None) -> int:
 
     max_retries: int = 3
     fix_prompt: str = ""
+    verify_retry_notes: str = ""
     verdict: dict[str, Any] = {}
     changed: list[str] = []
     skip_impl: bool = False
@@ -1151,6 +1152,10 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     save_plan_state(state)
                     return 1
+        # The physical gate already passed, so retry semantic verification
+        # without rerunning implementation on later attempts.
+        skip_impl = True
+
         # --- LAYER 3: LLM semantic review (only reached after physical gate passes) ---
         verify_payload = {
             "title": selected_title,
@@ -1168,6 +1173,7 @@ def main(argv: list[str] | None = None) -> int:
             "- Evaluate ONLY listed acceptance criteria for this work item.\n"
             "- Status is 'pass' only if all criteria are fully met.\n"
             "- If 'fail', list missing items concisely.\n\n"
+            f"{verify_retry_notes}"
             f"PRD excerpt:\n{prd_summary}\n\n"
             f"PLAN excerpt:\n{plan_summary}\n\n"
             f"Work item:\n{json.dumps(verify_payload, indent=2)}\n"
@@ -1199,9 +1205,12 @@ def main(argv: list[str] | None = None) -> int:
 
             if attempt < max_retries - 1:
                 logger.warning(f"PM Verify Failed. Notes: {notes}")
-                fix_prompt = (
-                    f"PM Verification Failed. Notes: {notes}\nMissing:\n"
-                    + "\n".join(missing_list)
+                verify_retry_notes = (
+                    "Previous PM verification returned fail.\n"
+                    f"Notes: {notes}\n"
+                    f"Missing:\n{'\n'.join(missing_list)}\n\n"
+                    "Re-evaluate the same changed files against only the listed "
+                    "acceptance criteria.\n\n"
                 )
                 continue
             else:

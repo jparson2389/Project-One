@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from tools.validation_gate import (
+    WriteEntry,
     WritesPayload,
+    extract_validation_command,
     normalize_docstring_quotes,
 )
 
@@ -36,10 +38,10 @@ def test_write_entry_normalizes_py_content() -> None:
     """WriteEntry transforms .py content with triple-double docstrings."""
     payload = WritesPayload(
         writes=[
-            {
-             "path": "tests/sample.py",
-            "content": 'def bar():\n    """Doc."""\n    return 1\n',
-            },
+            WriteEntry(
+                path="tests/sample.py",
+                content='def bar():\n    """Doc."""\n    return 1\n',
+            ),
         ],
         notes="",
     )
@@ -52,10 +54,10 @@ def test_write_entry_ignores_non_py() -> None:
     """WriteEntry does not transform non-.py files."""
     payload = WritesPayload(
         writes=[
-            {
-                "path": "docs/readme.md",
-                "content": 'Some """quoted""" text.\n',
-            },
+            WriteEntry(
+                path="docs/readme.md",
+                content='Some """quoted""" text.\n',
+            ),
         ],
         notes="",
     )
@@ -84,3 +86,41 @@ def test_apply_writes_uses_transformed_content(tmp_path) -> None:
     written = changed[0].read_text(encoding="utf-8")
     assert "'''Doc.'''" in written
     assert '"""' not in written
+
+
+def test_extract_validation_command_accepts_inline_validation() -> None:
+    """Inline Validation commands are extracted from PLAN instructions."""
+    instructions = (
+        "**Target File:** `src/aetherlink/example.py`\n"
+        "**Validation:** `uv run pytest tests/test_example.py -vv`\n"
+    )
+
+    command = extract_validation_command(instructions)
+
+    assert command == "uv run pytest tests/test_example.py -vv"
+
+
+def test_extract_validation_command_accepts_multiline_validation() -> None:
+    """Multiline Validation commands are extracted from PLAN instructions."""
+    instructions = (
+        "**Target File:** `proto/capture.proto`\n"
+        "**Validation:**\n"
+        "`uv run python -m grpc_tools.protoc -I proto/ proto/capture.proto`\n"
+    )
+
+    command = extract_validation_command(instructions)
+
+    assert command == "uv run python -m grpc_tools.protoc -I proto/ proto/capture.proto"
+
+
+def test_extract_validation_command_falls_back_to_command_when_needed() -> None:
+    """Command is used when Validation only states an exit condition."""
+    instructions = (
+        "**Target File:** `src/aetherlink/vision/cv_capture.py`\n"
+        "**Command:** `uv run pytest tests/test_cv_capture.py -vv`\n"
+        "**Validation:** Exit 0\n"
+    )
+
+    command = extract_validation_command(instructions)
+
+    assert command == "uv run pytest tests/test_cv_capture.py -vv"
