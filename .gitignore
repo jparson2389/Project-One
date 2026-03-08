@@ -98,6 +98,7 @@ router.yaml
 
 # Ignore a specific file inside a subfolder
 docs/commands.md
+state/plan_state.json
 
 # Codex temporary files
 .codex/history.jsonl

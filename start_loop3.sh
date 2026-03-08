@@ -12,7 +12,7 @@ if ! lsof -i :8080 > /dev/null; then
     echo "\e[36mStarting llama.cpp Engine (RTX 4080 Super + Speculative Decoding)...\e[0m"
 
     # Native WSL paths to your tools and Windows-hosted models
-    LLAMA_BIN="$HOME/Projects/ai-tools/llama.cpp/build/bin/llama-server"
+    LLAMA_BIN="/home/auto_23/Projects/ai-tools/llama.cpp/build/bin/llama-server"
     MAIN_MODEL="/mnt/c/Users/Dada/.lmstudio/models/lmstudio-community/Qwen2.5-Coder-14B-Instruct-GGUF/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf"
     DRAFT_MODEL="/mnt/c/Users/Dada/.lmstudio/models/lmstudio-community/Qwen2.5-Coder-0.5B-Instruct-GGUF/Qwen2.5-Coder-0.5B-Instruct-Q8_0.gguf"
 
@@ -23,7 +23,7 @@ if ! lsof -i :8080 > /dev/null; then
         --model-draft "$DRAFT_MODEL" \
         --n-gpu-layers 99 \
         --n-gpu-layers-draft 99 \
-        --flash-attn \
+        --flash-attn on \
         --port 8080 > llama_server.log 2>&1 &
 
     echo "\e[33mWaiting for llama-server to initialize...\e[0m"
