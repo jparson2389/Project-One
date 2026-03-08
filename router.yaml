@@ -1,0 +1,58 @@
+model_list:
+  # All aliases resolve to the same local llama-server instance.
+  # The model field is arbitrary — llama-server ignores it and serves
+  # whichever model was loaded at startup.
+
+  - model_name: architect
+    litellm_params:
+      model: openai/qwen2.5-coder-14b
+      api_base: http://127.0.0.1:8080/v1
+      api_key: none
+      temperature: 0.1
+      context_window: 32768
+      max_input_tokens: 28000
+
+  - model_name: pm
+    litellm_params:
+      model: openai/qwen2.5-coder-14b
+      api_base: http://127.0.0.1:8080/v1
+      api_key: none
+      temperature: 0.3
+      context_window: 32768
+      max_input_tokens: 28000
+
+  - model_name: quick-fix
+    litellm_params:
+      model: openai/qwen2.5-coder-14b
+      api_base: http://127.0.0.1:8080/v1
+      api_key: none
+      temperature: 0.1
+      context_window: 32768
+      max_input_tokens: 28000
+
+  - model_name: ui-ux
+    litellm_params:
+      model: openai/qwen2.5-coder-14b
+      api_base: http://127.0.0.1:8080/v1
+      api_key: none
+      temperature: 0.4
+      context_window: 32768
+      max_input_tokens: 28000
+
+  - model_name: researcher
+    litellm_params:
+      model: openai/qwen2.5-coder-14b
+      api_base: http://127.0.0.1:8080/v1
+      api_key: none
+      temperature: 0.3
+      context_window: 32768
+      max_input_tokens: 28000
+
+router_settings:
+  routing_strategy: simple-shuffle
+  num_retries: 2
+  retry_after: 1
+  timeout: 300
+
+general_settings:
+  health_check_interval: 30
