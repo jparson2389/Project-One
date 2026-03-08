@@ -39,6 +39,28 @@ WRITES_RESPONSE_FORMAT: dict = {
 }
 
 
+PM_VERIFY_RESPONSE_FORMAT: dict = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "pm_verify_response",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "required": ["status", "missing", "notes"],
+            "additionalProperties": False,
+            "properties": {
+                "status": {"type": "string", "enum": ["pass", "fail"]},
+                "missing": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "notes": {"type": "string"},
+            },
+        },
+    },
+}
+
+
 def _extract_fenced_json(text: str) -> str | None:
     """Return the content of the first ```json...``` fence, if any."""
     match = re.search(

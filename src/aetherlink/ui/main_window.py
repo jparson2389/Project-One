@@ -1,7 +1,12 @@
-"""PySide6 UI shell main window implementation."""
+"""Pyside6 UI shell for main window implementation."""
 
 from PySide6.QtCore import QCoreApplication
-from PySide6.QtWidgets import QLabel, QMainWindow, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QLabel,
+    QMainWindow,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class MainWindow(QMainWindow):

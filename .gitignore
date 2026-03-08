@@ -93,6 +93,8 @@ Layout-Endgoal.txt
 .tmp.driveupload/
 start-loop.ps1
 repo_audit_clean.txt
+start-loop2.ps1
+router.yaml
 
 # Ignore a specific file inside a subfolder
 docs/commands.md

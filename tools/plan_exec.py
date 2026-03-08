@@ -13,17 +13,49 @@ from loguru import logger
 from openai import OpenAI
 from pydantic import BaseModel, Field, field_validator
 
+"""
+plan_exec.py — Implementation plan executor with deterministic PM selection, schema repair,
+and stricter PM verification handling.
+
+This module orchestrates the execution of PLAN.md work items. It interacts with
+LLM agents to select the next item, implement it, run build/quality/validation
+gates, and verify semantic completeness. Key improvements over the upstream
+version include:
+
+* **Schema repair:** malformed writes payloads are detected and repaired
+  when unambiguous (e.g. a single write entry at the top level).
+* **Deterministic PM selection:** the PM must select a work item by `id`.
+  Titles are validated against the selected id and phase to prevent freeform
+  renaming.
+* **Stricter PM verify:** verdicts are validated against an explicit schema
+  with a cheap repair pass that strips unknown keys. Invalid verdicts no
+  longer consume full retry attempts.
+* **Structured logging:** invalid selection reasons and validation failures
+  are classified for easier debugging and potential quarantine.
+
+The code retains the original retry loop structure but uses a `while` loop
+instead of a `for` loop so that certain repairs do not consume an attempt.
+
+"""
+
 try:
-    from tools.json_utils import WRITES_RESPONSE_FORMAT, safe_json_from_model
-except ModuleNotFoundError:
+    # Prefer the local tools package if available
+    from tools.json_utils import (
+        PM_VERIFY_RESPONSE_FORMAT,
+        WRITES_RESPONSE_FORMAT,
+        safe_json_from_model,
+    )
+except ModuleNotFoundError:  # pragma: no cover
     from json_utils import (  # type: ignore[no-redef]
+        PM_VERIFY_RESPONSE_FORMAT,
         WRITES_RESPONSE_FORMAT,
         safe_json_from_model,
     )
 
 try:
+    # Import prompts from local tools
     from tools.prompts import IMPL_SYSTEM, SYSTEM_PM_NEXT, SYSTEM_PM_VERIFY
-except ModuleNotFoundError:
+except ModuleNotFoundError:  # pragma: no cover
     from prompts import (  # type: ignore[no-redef]
         IMPL_SYSTEM,
         SYSTEM_PM_NEXT,
@@ -32,41 +64,28 @@ except ModuleNotFoundError:
 
 try:
     from tools.context_utils import ContextMonitor, count_tokens, get_model_settings
-except ModuleNotFoundError:
+except ModuleNotFoundError:  # pragma: no cover
     from context_utils import (  # type: ignore[no-redef]
         ContextMonitor,
         count_tokens,
         get_model_settings,
     )
 
-ROOT = Path(__file__).resolve().parents[1]
-STATE_PATH = ROOT / "state" / "plan_state.json"
+try:
+    from tools.gbnf_grammars import (
+        GBNF_PM_NEXT,
+        GBNF_PM_VERIFY,
+        GBNF_WRITES,
+        is_local_backend,
+    )
+except ModuleNotFoundError:  # pragma: no cover
+    from gbnf_grammars import (  # type: ignore[no-redef]
+        GBNF_PM_NEXT,
+        GBNF_PM_VERIFY,
+        GBNF_WRITES,
+        is_local_backend,
+    )
 
-# Configure Loguru to write to a specfic logs folder
-LOG_DIR = ROOT / "logs"
-LOG_DIR.mkdir(exist_ok=True)
-logger.add(
-    LOG_DIR / "plan_execution_{time:YYYY-MM-DD}.log", rotation="1 MB", level="DEBUG"
-)
-
-SCHEMA_PM_NEXT = """{
-  "phase": "Phase 0|Phase 1|Phase 2|Phase 3|Phase 4",
-  "work_items": [
-    {
-      "id": "phaseX_slug",
-      "title": "short",
-      "agent": "architect|ui-ux",
-      "acceptance": ["testable bullets"],
-      "notes": "short"
-    }
-  ]
-}"""
-
-SCHEMA_PM_VERIFY = """{
-  "status": "pass|fail",
-  "missing": ["..."],
-  "notes": "short"
-}"""
 try:
     from tools.apply_writes import (  # type: ignore
         ALLOWED_ROOT_FILES,
@@ -76,13 +95,52 @@ try:
         validate_writes_payload,
     )
 except ModuleNotFoundError:  # pragma: no cover
-    from apply_writes import (  # type: ignore
+    from apply_writes import (  # type: ignore[no-redef]
         ALLOWED_ROOT_FILES,
         ALLOWED_WRITE_PREFIXES,
         DENIED_WRITE_PATHS,
         PLACEHOLDER_WRITE_PATHS,
         validate_writes_payload,
     )
+
+# ---------------------------------------------------------------------------
+# Internal helpers for evidence extraction
+# ---------------------------------------------------------------------------
+
+
+def _gather_gate_evidence(report: Any) -> list[str]:
+    """Flatten evidence and error messages from a ValidationReport into a list.
+
+    The ValidationReport from tools.validation_gate contains a list of GateResult
+    layers. Each layer may record evidence and errors. This helper returns
+    a concatenated list of all non-empty evidence and error strings for
+    persistence into plan state/history.
+    """
+    items: list[str] = []
+    try:
+        for layer in getattr(report, "layers", []):
+            if getattr(layer, "errors", None):
+                items.extend([e for e in layer.errors if e])
+            if getattr(layer, "evidence", None):
+                items.extend([e for e in layer.evidence if e])
+    except Exception:
+        pass
+    return items
+
+
+ROOT = Path(__file__).resolve().parents[1]
+STATE_PATH = ROOT / "state" / "plan_state.json"
+
+# Configure Loguru to write to a specific logs folder
+LOG_DIR = ROOT / "logs"
+LOG_DIR.mkdir(exist_ok=True)
+logger.add(
+    LOG_DIR / "plan_execution_{time:YYYY-MM-DD}.log", rotation="1 MB", level="DEBUG"
+)
+
+# ---------------------------------------------------------------------------
+# Schema hints and constants
+# ---------------------------------------------------------------------------
 
 _HINT_PREFIXES = ", ".join(sorted(ALLOWED_WRITE_PREFIXES))
 _HINT_ROOT = ", ".join(sorted(ALLOWED_ROOT_FILES))
@@ -118,6 +176,30 @@ HARD RULES:
 - All paths must be repository-relative (never absolute).
 """
 )
+
+# The PM next and verify schemas are declared here for clarity
+SCHEMA_PM_NEXT = """{
+  "phase": "Phase 0|Phase 1|Phase 2|Phase 3|Phase 4",
+  "work_items": [
+    {
+      "id": "phaseX_slug",
+      "title": "short",
+      "agent": "architect|ui-ux",
+      "acceptance": ["testable bullets"],
+      "notes": "short"
+    }
+  ]
+}"""
+
+SCHEMA_PM_VERIFY = """{
+  "status": "pass|fail",
+  "missing": ["..."],
+  "notes": "short"
+}"""
+
+# ---------------------------------------------------------------------------
+# Helper data models
+# ---------------------------------------------------------------------------
 
 
 class AgentManifest(BaseModel):
@@ -213,6 +295,11 @@ class PMVerdict(BaseModel):
         return [str(x) for x in v if str(x).strip()]
 
 
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
 def _now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
@@ -234,16 +321,8 @@ def phase_number(phase: str) -> int:
 
 
 def infer_agent_from_instructions(instructions: str, title: str) -> str:
-    """Derive agent from Target file path in PLAN.md instructions.
-
-    Args:
-        instructions: Parsed instruction block for the work item.
-        title: Work item title (fallback only).
-
-    Returns:
-        'ui-ux' if the target file is under a UI path, else 'architect'.
-    """
-    match = re.search(r"\*\*Target Files?:\*\s*`([^`]+)`", instructions)
+    """Derive agent from Target file path in PLAN.md instructions."""
+    match = re.search(r"\*\*Target Files?:\*\*\s*`([^`]+)`", instructions)
     if match:
         path = match.group(1).lower()
         if "/ui/" in path or "/panels/" in path:
@@ -265,11 +344,7 @@ _ITEM_RE = re.compile(r"^\s*-\s*\[(?P<mark>[ xX])\]\s+(?P<title>.+?)\s*$")
 
 
 def extract_phase_work_items(plan_text: str) -> list[PlanWorkItem]:
-    """Parse PLAN.md into structured work items via a line-by-line state machine.
-
-    Tolerates em dash, en dash, and hyphen as phase header separators.
-    Captures blockquote (>) instruction lines attached to each checklist item.
-    """
+    """Parse PLAN.md into structured work items via a line-by-line state machine."""
     items: list[PlanWorkItem] = []
     current_phase: str = ""
     current_item: PlanWorkItem | None = None
@@ -285,7 +360,6 @@ def extract_phase_work_items(plan_text: str) -> list[PlanWorkItem]:
             )
 
     for raw_line in plan_text.splitlines():
-        # Phase header?
         phase_m = _PHASE_HEADER_RE.match(raw_line)
         if phase_m:
             _flush_item()
@@ -295,7 +369,6 @@ def extract_phase_work_items(plan_text: str) -> list[PlanWorkItem]:
             continue
         if not current_phase:
             continue
-        # Checklist item?
         item_m = _ITEM_RE.match(raw_line)
         if item_m:
             _flush_item()
@@ -318,12 +391,14 @@ def extract_phase_work_items(plan_text: str) -> list[PlanWorkItem]:
 
 
 def save_plan_state(state: dict[str, Any]) -> None:
+    """Persist the plan execution state to disk."""
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     state["updated_at"] = _now_iso()
     STATE_PATH.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
 
 
 def load_or_initialize_plan_state(plan_items: list[PlanWorkItem]) -> dict[str, Any]:
+    """Load an existing plan_state.json or initialise from PLAN.md items."""
     existing: dict[str, Any] = {}
     if STATE_PATH.exists():
         try:
@@ -410,9 +485,8 @@ def load_or_initialize_plan_state(plan_items: list[PlanWorkItem]) -> dict[str, A
     return state
 
 
-def next_open_work_items(
-    state: dict[str, Any],
-) -> tuple[str, list[dict[str, Any]]]:
+def next_open_work_items(state: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
+    """Return the earliest phase with open items and all open items in that phase."""
     items = state.get("items", [])
     if not isinstance(items, list):
         return "", []
@@ -455,10 +529,10 @@ def update_state_item(
     missing: list[str] | None = None,
     evidence: list[str] | None = None,
 ) -> None:
+    """Update a single persisted state item with new status/notes/missing/evidence."""
     items = state.get("items", [])
     if not isinstance(items, list):
         return
-
     target: dict[str, Any] | None = None
     for item in items:
         if isinstance(item, dict) and item.get("id") == item_id:
@@ -487,11 +561,11 @@ def append_history(
     missing: list[str] | None = None,
     notes: str = "",
 ) -> None:
+    """Append a history event for a completed or partial work item."""
     history = state.get("history")
     if not isinstance(history, list):
         history = []
         state["history"] = history
-
     payload = {
         "timestamp": _now_iso(),
         "phase": phase,
@@ -505,6 +579,7 @@ def append_history(
 
 
 def run_ps(path: str, args: list[str] | None = None) -> tuple[int, str]:
+    """Run a PowerShell script under .cursor/workflows and return (rc, combined output)."""
     cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(ROOT / path)]
     if args:
         cmd.extend(args)
@@ -519,11 +594,11 @@ def run_ps(path: str, args: list[str] | None = None) -> tuple[int, str]:
 
 
 def apply_writes_relpaths(payload: dict[str, Any]) -> list[str]:
+    """Apply writes to disk and return relative paths of changed files."""
     try:
         from tools.apply_writes import apply_writes as _apply  # local import
     except ModuleNotFoundError:  # pragma: no cover
         from apply_writes import apply_writes as _apply  # type: ignore[no-redef]
-
     changed = _apply(ROOT, payload)
     return [str(p.relative_to(ROOT)) for p in changed]
 
@@ -535,8 +610,9 @@ def call(
     user: str,
     temperature: float | None = None,
     response_format: Any = None,
+    grammar: str | None = None,
 ) -> ModelCall:
-    """Invokes the LLM and returns the raw model response."""
+    """Invoke an LLM and return the raw model response."""
     kwargs: dict[str, Any] = {
         "model": model,
         "temperature": temperature,
@@ -545,11 +621,12 @@ def call(
             {"role": "user", "content": user},
         ],
     }
-    if response_format is not None:
+    base_url = str(getattr(client, "base_url", ""))
+    if grammar and is_local_backend(base_url):
+        kwargs["extra_body"] = {"grammar": grammar}
+    elif response_format is not None:
         kwargs["response_format"] = response_format
-
     resp = client.chat.completions.create(**kwargs)
-
     content = (resp.choices[0].message.content or "").strip()
     return ModelCall(
         requested_model=model,
@@ -559,6 +636,7 @@ def call(
 
 
 def _write_failed_response(stage: str, kind: str, raw_text: str) -> Path:
+    """Persist a failed LLM response for later analysis and return its path."""
     logs_dir = ROOT / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
@@ -574,23 +652,25 @@ def call_json_with_retry(
     system: str,
     user: str,
     schema_hint: str,
-    temperature: float | None = None,  # let the model use its default temperature
+    temperature: float | None = None,
     response_format: dict | None = None,
+    grammar: str | None = None,
 ) -> dict[str, Any]:
-    from pathlib import Path
+    """Invoke an LLM expecting a JSON response.
 
-    debug_dir = Path("logs")
+    When *grammar* is provided and the backend is local, GBNF token-level
+    enforcement is used instead of ``response_format``.  If the first
+    response fails to parse, a repair prompt is sent.  Raises ValueError
+    if both attempts fail.
+    """
+    from pathlib import Path as _Path  # avoid conflict with outer Path
+
+    debug_dir = _Path("logs")
     debug_dir.mkdir(exist_ok=True)
-
     safe_stage = stage.replace("/", "_").replace("\\", "_")
-    (debug_dir / f"prompt_system_{safe_stage}.txt").write_text(
-        system,
-        encoding="utf-8",
-    )
-    (debug_dir / f"prompt_user_{safe_stage}.txt").write_text(
-        user,
-        encoding="utf-8",
-    )
+    (debug_dir / f"prompt_system_{safe_stage}.txt").write_text(system, encoding="utf-8")
+    (debug_dir / f"prompt_user_{safe_stage}.txt").write_text(user, encoding="utf-8")
+
     initial = call(
         client,
         model,
@@ -598,6 +678,7 @@ def call_json_with_retry(
         user,
         temperature=temperature,
         response_format=response_format,
+        grammar=grammar,
     )
     logger.debug(
         f"[llm] stage={stage} requested_alias={initial.requested_model} "
@@ -609,7 +690,6 @@ def call_json_with_retry(
             f"requested_alias={initial.requested_model} "
             f"actual_model={initial.actual_model}"
         )
-
     try:
         return safe_json_from_model(stage, initial.content)
     except ValueError:
@@ -623,8 +703,7 @@ def call_json_with_retry(
         f"{initial.content}"
     )
     (debug_dir / f"prompt_repair_user_{safe_stage}.txt").write_text(
-        repair_user,
-        encoding="utf-8",
+        repair_user, encoding="utf-8"
     )
     repaired = call(
         client,
@@ -633,6 +712,7 @@ def call_json_with_retry(
         repair_user,
         temperature=None,
         response_format=response_format,
+        grammar=grammar,
     )
     logger.debug(
         f"[llm] stage={stage} retry=1 requested_alias={repaired.requested_model} "
@@ -655,6 +735,7 @@ def call_json_with_retry(
 
 
 def _clip(text: str, max_chars: int) -> str:
+    """Clip a text to at most max_chars, preserving context around beginning and end."""
     text = text.strip()
     if len(text) <= max_chars:
         return text
@@ -662,43 +743,34 @@ def _clip(text: str, max_chars: int) -> str:
 
 
 def _title_keywords(title: str) -> set[str]:
-    stop_words = {
-        "add",
-        "and",
-        "deliver",
-        "implement",
-        "the",
-        "with",
-    }
+    stop_words = {"add", "and", "deliver", "implement", "the", "with"}
     words = re.findall(r"[a-z0-9]+", title.lower())
     return {word for word in words if len(word) >= 3 and word not in stop_words}
 
 
 def filter_acceptance_criteria(title: str, acceptance: list[Any]) -> list[str]:
+    """Filter acceptance criteria to only those relevant to the title keywords."""
     criteria = [
         item.strip() for item in acceptance if isinstance(item, str) and item.strip()
     ]
     if not criteria:
         return [f"Complete PLAN work item: {title}"]
-
     keywords = _title_keywords(title)
     if not keywords:
         return criteria
-
     filtered: list[str] = []
     for criterion in criteria:
         text = criterion.lower()
         if any(keyword in text for keyword in keywords):
             filtered.append(criterion)
-
     if filtered:
         return filtered
-
     # Fall back to a single scoped criterion rather than phase-wide KPIs.
     return [f"Complete PLAN work item: {title}"]
 
 
 def quality_scope_args(changed_files: list[str]) -> list[str]:
+    """Prepare arguments for the quality checker script based on changed files."""
     unique_paths = [p for p in dict.fromkeys(changed_files) if p.strip()]
     if not unique_paths:
         return []
@@ -706,18 +778,18 @@ def quality_scope_args(changed_files: list[str]) -> list[str]:
 
 
 def extract_plan_phase_summary(plan: str, max_chars: int = 12000) -> str:
-    """Shrinks PLAN.md while preserving only Phase sections and their tasks."""
+    """Shrink PLAN.md while preserving only Phase sections and their tasks."""
     keep: list[str] = []
     for line in plan.splitlines():
-        # Check for Phase headers
+        # Phase headers
         if re.match(r"^\s*## Phase", line, re.I):
             keep.append(line)
             continue
-        # Check for Exit Criteria
+        # Exit Criteria header
         if re.match(r"^\s*Exit Criteria", line, re.I):
             keep.append(line)
             continue
-        # Check for Task items (-) or Instructions (>)
+        # Task items (-) or instructions (>)
         if re.match(r"^\s*[-\>]", line):
             keep.append(line)
     result_text = "\n".join(keep)
@@ -725,22 +797,87 @@ def extract_plan_phase_summary(plan: str, max_chars: int = 12000) -> str:
 
 
 def extract_prd_hard_requirements(prd: str, max_chars: int = 12000) -> str:
-    """Extracts high-signal PRD sections using regex to survive formatting shifts."""
+    """Extract high-signal PRD sections using regex to survive formatting shifts."""
     keep: list[str] = []
     capture = False
     targets = {"architectural", "plugin system", "capture system"}
     for line in prd.splitlines():
-        # Regex looks for '##' regardless of leading whitespace
         header_match = re.match(r"^\s*##\s+(.*)$", line)
         if header_match:
             header_content = header_match.group(1).lower()
-            # Start capturing if header matches keywords
             capture = any(t in header_content for t in targets)
         if capture:
             keep.append(line)
     # Fallback to whole doc if no specific sections were caught
     result_text = "\n".join(keep) if keep else prd
     return result_text[:max_chars]
+
+
+# ---------------------------------------------------------------------------
+# Implementation payload repair helpers
+# ---------------------------------------------------------------------------
+
+
+def coerce_impl_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    """
+    Attempt to repair a malformed implementation payload.
+
+    Only unambiguous repairs are allowed. If the payload is already valid or
+    cannot be safely repaired the original payload is returned with changed=False.
+    Repairs include:
+      * Wrapping a top-level dict containing 'path' and 'content' as a single write.
+      * Renaming a top-level 'write' key to 'writes'.
+      * Converting a dict in 'writes' to a single-item list.
+      * Adding a missing 'notes' field as an empty string.
+    """
+    if not isinstance(payload, dict):
+        return payload, False
+    changed = False
+    new_payload = dict(payload)
+
+    # If 'writes' is missing, try to infer a single write from top-level keys.
+    if "writes" not in new_payload:
+        if "path" in new_payload and "content" in new_payload:
+            # Wrap the single write entry
+            new_payload = {
+                "writes": [
+                    {"path": new_payload["path"], "content": new_payload["content"]}
+                ],
+                "notes": new_payload.get("notes", ""),
+            }
+            changed = True
+        elif "write" in new_payload:
+            write_obj = new_payload.pop("write")
+            if isinstance(write_obj, list):
+                new_payload["writes"] = write_obj
+            elif isinstance(write_obj, dict):
+                new_payload["writes"] = [write_obj]
+            changed = True
+    else:
+        # If writes is a dict rather than list, wrap it.
+        if isinstance(new_payload["writes"], dict):
+            new_payload["writes"] = [new_payload["writes"]]
+            changed = True
+
+    # Always ensure notes field exists.
+    if "notes" not in new_payload:
+        new_payload["notes"] = ""
+        changed = True
+
+    return new_payload, changed
+
+
+def classify_validate_error(exc: Exception) -> str:
+    """Classify a validation error into schema or path failure categories."""
+    msg = str(exc).lower()
+    if "path" in msg or "prefix" in msg or "root" in msg or "forbidden" in msg:
+        return "writes_path_fail"
+    return "writes_schema_fail"
+
+
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -752,6 +889,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--prd", default="PRD.md")
     ap.add_argument("--manifest", default="agent_manifest.json")
     args = ap.parse_args(argv if argv is not None else sys.argv[1:])
+
+    # Load manifest and initialise API client
     manifest = json.loads((ROOT / args.manifest).read_text(encoding="utf-8"))
     _ctx_monitor = ContextMonitor()
     client = OpenAI(
@@ -759,13 +898,14 @@ def main(argv: list[str] | None = None) -> int:
         api_key=manifest["api_key"],
         timeout=300,
     )
+
+    # Read source documents
     plan = (ROOT / args.plan).read_text(encoding="utf-8", errors="ignore")
     prd = (
         (ROOT / args.prd).read_text(encoding="utf-8", errors="ignore")
         if (ROOT / args.prd).exists()
         else ""
     )
-
     max_doc_chars = args.max_doc_chars
 
     plan_summary = extract_plan_phase_summary(plan, max_doc_chars)
@@ -778,46 +918,49 @@ def main(argv: list[str] | None = None) -> int:
     if args.state_only:
         return 0
 
-    # 1. Map titles to instructions
-    open_items_map = {
-        item["title"]: item.get("instructions", "").strip()
-        for item in open_items
-        if item.get("title")
-    }
+    # Map IDs to instructions and build allowed selection lines
+    open_items_by_id: dict[str, dict[str, Any]] = {}
+    for item in open_items:
+        iid = item.get("id")
+        if not iid:
+            continue
+        open_items_by_id[iid] = item
 
-    # 2. Build the set of allowed titles
-    allowed_titles = set(open_items_map.keys())
-
-    allowed_lines = [
-        f"- {t}\n  Requirements: {i}" if i else f"- {t}"
-        for t, i in open_items_map.items()
-    ]
+    # Build a human-readable list of allowed items for the PM
+    allowed_lines: list[str] = []
+    for item_id, item in open_items_by_id.items():
+        title = item.get("title", "")
+        instructions = str(item.get("instructions", "")).strip()
+        if instructions:
+            allowed_lines.append(
+                f"- id: {item_id}\n  title: {title}\n  Requirements: {instructions}"
+            )
+        else:
+            allowed_lines.append(f"- id: {item_id}\n  title: {title}")
     allowed_text = "\n".join(allowed_lines)
 
-    # 4. Log progress (Concise & PEP 8 compliant)
+    # Log progress
     done_items = [i for i in state.get("items", []) if i.get("status") == "done"]
     done_count = len(done_items)
     total_count = len(state.get("items", []))
-
     logger.info(
         f"[state] phase={selected_phase} open={len(open_items)} "
         f"completed={done_count}/{total_count}"
     )
 
-    # 5. Construct the PM Prompt (PEP 8 / 88-char compliant)
+    # Construct the PM selection prompt
     pm_prompt = (
         "You are executing the Implementation Plan strictly in order.\n\n"
         "Deterministic execution state:\n"
         f"- Earliest incomplete phase: {selected_phase}\n"
-        "- Allowed unfinished work items (choose one exact title):\n"
+        "- Allowed unfinished work items (choose one id):\n"
         f"{allowed_text}\n\n"
         "Rules:\n"
-        "1. You MUST select one title from the list above.\n"
+        "1. You MUST select one work item by its 'id' from the list above.\n"
         f"2. Phase MUST be exactly '{selected_phase}'.\n"
-        "3. Use the 'Requirements' listed under your chosen title to "
-        "define the scope.\n"
-        "4. Attach concrete acceptance criteria based on those "
-        "specific Requirements.\n\n"
+        "3. The 'title' you return must match the selected id.\n"
+        "4. Use the 'Requirements' listed under your chosen id to define the scope.\n"
+        "5. Attach concrete acceptance criteria based on those specific Requirements.\n\n"
         "Return JSON only.\n\n"
         "PRD excerpt (hard requirements):\n"
         f"{prd_summary}\n\n"
@@ -826,33 +969,44 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     pm_alias = "pm"
-    queue = call_json_with_retry(
-        client=client,
-        stage="pm_next",
-        model=pm_alias,
-        system=SYSTEM_PM_NEXT,
-        user=pm_prompt,
-        schema_hint=SCHEMA_PM_NEXT,
-        temperature=None,  # let the model use its default temperature
-        response_format={"type": "text"},
-    )
+    try:
+        queue = call_json_with_retry(
+            client=client,
+            stage="pm_next",
+            model=pm_alias,
+            system=SYSTEM_PM_NEXT,
+            user=pm_prompt,
+            schema_hint=SCHEMA_PM_NEXT,
+            temperature=None,
+            response_format={"type": "text"},
+            grammar=GBNF_PM_NEXT,
+        )
+    except ValueError as exc:
+        logger.error(f"PM next selection failed to return valid JSON: {exc}")
+        queue = {}
 
+    chosen_item: PMWorkItem | None = None
+    queued_phase = ""
     try:
         pm_response = PMResponse.model_validate(queue)
-        chosen_item = next(iter(pm_response.work_items), None)
         queued_phase = pm_response.phase
+        chosen_item = next(iter(pm_response.work_items), None)
     except Exception:
         chosen_item = None
         queued_phase = ""
 
+    # Fallback: first open item
     fallback_choice = next(iter(open_items), None)
     if fallback_choice is None:
         logger.error("No open items available.")
         return 1
-    fallback_title = str(fallback_choice.get("title", "")).strip()
-    selected_title = fallback_title
+
+    # Initialise defaults for selected work item
+    # Cast the fallback id to string to satisfy static type checking
+    selected_id: str = str(fallback_choice.get("id") or "")
+    selected_title = fallback_choice.get("title", "").strip()
     selected_agent = infer_agent_from_instructions(
-        fallback_choice.get("instructions", ""), fallback_title
+        fallback_choice.get("instructions", ""), selected_title
     )
     raw_acceptance: list[Any] = []
     invalid_reason = ""
@@ -860,45 +1014,56 @@ def main(argv: list[str] | None = None) -> int:
     if not chosen_item:
         invalid_reason = "missing_work_item"
     else:
-        if queued_phase != selected_phase:
-            invalid_reason = "phase_mismatch"
-        elif chosen_item.title not in allowed_titles:
-            invalid_reason = "title_not_open"
+        # Validate ID first
+        if chosen_item.id not in open_items_by_id:
+            invalid_reason = "unknown_id"
         else:
-            selected_title = chosen_item.title
-            selected_agent = chosen_item.agent
-            raw_acceptance = chosen_item.acceptance
+            expected = open_items_by_id[chosen_item.id]
+            if queued_phase != selected_phase:
+                invalid_reason = "phase_mismatch"
+            elif chosen_item.title.strip() != str(expected.get("title", "")).strip():
+                invalid_reason = "title_mismatch"
+            else:
+                selected_id = chosen_item.id
+                selected_title = expected.get("title", "")
+                selected_agent = chosen_item.agent
+                raw_acceptance = chosen_item.acceptance
 
     if invalid_reason:
         logger.warning(f"[pm_next] invalid_selection={invalid_reason} fallback=true")
         raw_acceptance = [f"Complete PLAN work item: {selected_title}"]
 
-    # Ensure we have the requirements for the final selected title
-    selected_requirements = open_items_map.get(
-        selected_title, "No specific requirements provided in PLAN.md."
+    # Fetch requirements for the final selected title
+    selected_requirements = (
+        str(
+            open_items_by_id.get(selected_id, {}).get(
+                "instructions", "No specific requirements provided in PLAN.md."
+            )
+        ).strip()
+        or "No specific requirements provided in PLAN.md."
     )
 
-    # --- VERIFICATION PRINT ---
+    # Log selected task for human visibility
     logger.info("=" * 40)
     logger.info(f"TARGET TASK: {selected_title}")
     logger.info(f"PLAN SPECS: {selected_requirements}")
     logger.info("=" * 40)
 
-    selected_item_id = work_item_id(selected_phase or "unknown", selected_title)
+    # Determine acceptance criteria and update state to in_progress
     acceptance = filter_acceptance_criteria(selected_title, raw_acceptance)
-
     update_state_item(
         state,
-        selected_item_id,
+        str(selected_id),
         status="in_progress",
         notes="Execution started",
     )
     save_plan_state(state)
 
+    # Implementation retry loop state
     max_retries: int = 3
+    schema_repair_used: bool = False
     fix_prompt: str = ""
     verify_retry_notes: str = ""
-    verdict: dict[str, Any] = {}
     changed: list[str] = []
     skip_impl: bool = False
     gate_report = None
@@ -906,14 +1071,15 @@ def main(argv: list[str] | None = None) -> int:
         {"status": "fail", "missing": [], "notes": ""}
     )
 
-    for attempt in range(max_retries):
+    attempt = 0
+    while attempt < max_retries:
         logger.info(f"--- Implementation attempt {attempt + 1}/{max_retries} ---")
-
         if skip_impl:
             logger.info("Physical gate passed - skipping impl, retrying PM verify only")
         else:
             impl_prompt = (
                 "Implement this PLAN work item ONLY.\n\n"
+                f"ID: {selected_id}\n"
                 f"Title: {selected_title}\n\n"
                 f"Plan Requirements: {selected_requirements}\n\n"
                 "Acceptance criteria:\n"
@@ -930,9 +1096,7 @@ def main(argv: list[str] | None = None) -> int:
             if fix_prompt:
                 impl_prompt += f"\nPREVIOUS ATTEMPT FAILED. FIX ISSUES:\n{fix_prompt}\n"
 
-            # FIX 2b: Use explicit router alias
             model_alias = selected_agent
-
             if not _ctx_monitor.track_usage(
                 model_alias,
                 count_tokens(impl_prompt),
@@ -941,56 +1105,109 @@ def main(argv: list[str] | None = None) -> int:
                 logger.warning(
                     f"[context] prompt near limit for {model_alias} - truncating"
                 )
+                # Clip PRD/PLAN summaries when near context window limit
                 prd_summary = _clip(prd_summary, 4000)
                 plan_summary = _clip(plan_summary, 4000)
 
-            impl_payload = call_json_with_retry(
-                client=client,
-                stage=f"impl_{selected_agent}",
-                model=model_alias,
-                system=IMPL_SYSTEM,
-                user=impl_prompt,
-                schema_hint=SCHEMA_HINT_IMPL,
-                temperature=None,
-                response_format=WRITES_RESPONSE_FORMAT,
-            )
+            try:
+                impl_payload = call_json_with_retry(
+                    client=client,
+                    stage=f"impl_{selected_agent}",
+                    model=model_alias,
+                    system=IMPL_SYSTEM,
+                    user=impl_prompt,
+                    schema_hint=SCHEMA_HINT_IMPL,
+                    temperature=None,
+                    response_format=WRITES_RESPONSE_FORMAT,
+                    grammar=GBNF_WRITES,
+                )
+            except ValueError as exc:
+                # JSON parse failure is fatal; mark blocked
+                logger.error(f"Implementation JSON parse failure: {exc}")
+                update_state_item(
+                    state,
+                    str(selected_id),
+                    status="blocked",
+                    notes=f"impl_json_parse: {exc}",
+                    missing=["json_parse_fail"],
+                    evidence=changed,
+                )
+                save_plan_state(state)
+                return 1
 
+            # Attempt to repair schema issues once before consuming an attempt
             try:
                 validate_writes_payload(impl_payload)
             except ValueError as exc:
-                if attempt < max_retries - 1:
-                    logger.warning(
-                        f"Attempt {attempt + 1}: Invalid writes payload: {exc}"
-                    )
-                    fix_prompt = (
-                        "Your JSON writes payload was rejected by path validation.\n"
-                        "Rules:\n"
-                        f"- Allowed prefixes: {_HINT_PREFIXES}\n"
-                        f"- Allowed root files: {_HINT_ROOT}\n"
-                        f"- Forbidden paths: {_HINT_DENIED}\n"
-                        f"- Forbidden placeholders: {_HINT_PLACEHOLDER}\n"
-                        "- Use ONLY single-quoted docstrings with meaningful content.\n"
-                        "- All public functions must have single-quoted docstrings.\n"
-                        "- Do NOT write to src/plugins/*.\n"
-                        "- If you meant a Python package plugin,\n"
-                        "- write under src/aetherlink/plugins/.\n"
-                        "- If you meant repo-root plugins, write under plugins/.\n"
-                        f"Error: {exc}\n"
-                        "Return corrected JSON writes only."
-                    )
-                    continue
-                raise
+                # If first time encountering a schema failure, try auto-repair
+                failure_kind = classify_validate_error(exc)
+                if not schema_repair_used:
+                    repaired_payload, changed_flag = coerce_impl_payload(impl_payload)
+                    if changed_flag:
+                        schema_repair_used = True
+                        try:
+                            validate_writes_payload(repaired_payload)
+                            impl_payload = repaired_payload
+                        except ValueError:
+                            # Repair unsuccessful, treat as schema failure
+                            pass
+                # After repair attempt, re-validate
+                try:
+                    validate_writes_payload(impl_payload)
+                except ValueError as exc2:
+                    failure_kind = classify_validate_error(exc2)
+                    if attempt < max_retries - 1:
+                        logger.warning(
+                            f"Attempt {attempt + 1}: Invalid writes payload ({failure_kind}): {exc2}"
+                        )
+                        if failure_kind == "writes_schema_fail":
+                            fix_prompt = (
+                                "Your JSON writes payload was rejected by schema validation.\n"
+                                "Return a JSON object with exactly two top-level keys:\n"
+                                '- "writes": array of {{"path": "...", "content": "..."}} entries\n'
+                                '- "notes": REQUIRED string summarising the changes\n'
+                                f"Error: {exc2}\n"
+                                "Return corrected JSON writes only."
+                            )
+                        else:
+                            fix_prompt = (
+                                "Your JSON writes payload contained invalid paths or forbidden locations.\n"
+                                "Rules:\n"
+                                f"- Allowed prefixes: {_HINT_PREFIXES}\n"
+                                f"- Allowed root files: {_HINT_ROOT}\n"
+                                f"- Forbidden paths: {_HINT_DENIED}\n"
+                                f"- Forbidden placeholders: {_HINT_PLACEHOLDER}\n"
+                                "- Use ONLY single-quoted docstrings with meaningful content.\n"
+                                "- Do NOT write to src/plugins/*.\n"
+                                f"Error: {exc2}\n"
+                                "Return corrected JSON writes only."
+                            )
+                        attempt += 1
+                        continue
+                    else:
+                        logger.error(
+                            f"Task Blocked: Invalid writes payload on final attempt ({failure_kind})."
+                        )
+                        update_state_item(
+                            state,
+                            str(selected_id),
+                            status="blocked",
+                            notes=str(exc2),
+                            missing=[failure_kind],
+                            evidence=changed,
+                        )
+                        save_plan_state(state)
+                        return 1
 
+            # Apply writes and format changed files
             changed = apply_writes_relpaths(impl_payload)
             if changed:
-                import subprocess
-
                 subprocess.run(
                     ["uv", "run", "ruff", "format", *changed],
                     cwd=ROOT,
                     capture_output=True,
                 )
-            # Hard Gate: refuse to proceed if no files were written.
+            # Hard gate: ensure we wrote at least one file
             if not changed:
                 no_write_msg = (
                     "Implementation returned no file writes. "
@@ -999,12 +1216,13 @@ def main(argv: list[str] | None = None) -> int:
                 if attempt < max_retries - 1:
                     logger.warning(f"Attempt {attempt + 1}: {no_write_msg}")
                     fix_prompt = no_write_msg
+                    attempt += 1
                     continue
                 else:
                     logger.error("Task Blocked: No files written on final attempt.")
                     update_state_item(
                         state,
-                        selected_item_id,
+                        str(selected_id),
                         status="blocked",
                         notes=no_write_msg,
                         missing=["No files written"],
@@ -1018,6 +1236,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"Task: {selected_title} | Modified: {len(changed)}"
             )
 
+            # Build assets (PowerShell)
             build_rc, build_out = run_ps(".cursor/workflows/build-assets.ps1")
             if build_rc != 0:
                 if attempt < max_retries - 1:
@@ -1026,12 +1245,13 @@ def main(argv: list[str] | None = None) -> int:
                         "Build assets failed. Fix the build errors:\n"
                         f"{_clip(build_out, 4000)}"
                     )
+                    attempt += 1
                     continue
                 else:
                     logger.error("Task Blocked: Build failed on final attempt.")
                     update_state_item(
                         state,
-                        selected_item_id,
+                        str(selected_id),
                         status="blocked",
                         notes="Build assets failed",
                         missing=["Build failed"],
@@ -1040,11 +1260,11 @@ def main(argv: list[str] | None = None) -> int:
                     save_plan_state(state)
                     return 1
 
+            # Run quality gate
             quality_args = quality_scope_args(changed)
             rc, quality_out = run_ps(
                 ".cursor/workflows/check-quality.ps1", quality_args
             )
-
             if rc != 0:
                 q_out_exc = _clip(quality_out, 12000) if quality_out else ""
                 q_fix_prompt = (
@@ -1056,7 +1276,6 @@ def main(argv: list[str] | None = None) -> int:
                     f"Quality command output:\n{q_out_exc}\n\n"
                     f"Changed files:\n{json.dumps(changed, indent=2)}\n\n"
                 )
-
                 try:
                     fix_payload = call_json_with_retry(
                         client=client,
@@ -1067,17 +1286,19 @@ def main(argv: list[str] | None = None) -> int:
                         schema_hint=SCHEMA_HINT_IMPL,
                         temperature=None,
                         response_format=WRITES_RESPONSE_FORMAT,
+                        grammar=GBNF_WRITES,
                     )
                 except ValueError as exc:
                     if attempt < max_retries - 1:
                         logger.warning(f"Quick-fix invalid JSON: {exc}. Retrying.")
                         fix_prompt = "Quick-fix invalid JSON. Rewrite code."
+                        attempt += 1
                         continue
                     else:
                         logger.error(f"Task Blocked: Bad JSON final attempt: {exc}")
                         update_state_item(
                             state,
-                            selected_item_id,
+                            str(selected_id),
                             status="blocked",
                             notes="Quick-fix invalid JSON",
                             missing=["json"],
@@ -1085,10 +1306,9 @@ def main(argv: list[str] | None = None) -> int:
                         )
                         save_plan_state(state)
                         return 1
-
+                # Validate and apply quick fix
                 validate_writes_payload(fix_payload)
                 changed += apply_writes_relpaths(fix_payload)
-
                 rc2, quality_out2 = run_ps(
                     ".cursor/workflows/check-quality.ps1", quality_scope_args(changed)
                 )
@@ -1098,12 +1318,13 @@ def main(argv: list[str] | None = None) -> int:
                             "Quality failing after quick fix. Output:\n"
                             f"{_clip(quality_out2, 4000)}"
                         )
+                        attempt += 1
                         continue
                     else:
                         logger.error("Task Blocked: Quality failing.")
                         update_state_item(
                             state,
-                            selected_item_id,
+                            str(selected_id),
                             status="blocked",
                             notes="Quality failing",
                             missing=["Quality"],
@@ -1112,14 +1333,13 @@ def main(argv: list[str] | None = None) -> int:
                         save_plan_state(state)
                         return 1
 
+            # Run validation gate (layers 1+2)
             try:
                 from tools.validation_gate import run_validation_gate
             except ModuleNotFoundError:
                 from validation_gate import (
                     run_validation_gate,  # type: ignore[no-redef]
                 )
-
-            # --- LAYER 1 + 2: Physical gate (filesystem + test command) ---
             gate_report = run_validation_gate(
                 repo_root=ROOT,
                 instructions=selected_requirements,
@@ -1135,29 +1355,30 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     fix_prompt = (
                         f"Physical validation gate failed. Errors:\n{gate_errors}\n\n"
-                        "Ensure every Target File listed in the PLAN instructions exists"
-                        "in the PLAN instructions exists"
+                        "Ensure every Target File listed in the PLAN instructions exists "
                         "and the **Validation:** command passes."
                     )
+                    attempt += 1
                     continue
                 else:
                     logger.error("Task Blocked: Physical gate failed on final attempt.")
+                    # Persist structured gate evidence when blocking the task
                     update_state_item(
                         state,
-                        selected_item_id,
+                        str(selected_id),
                         status="blocked",
                         notes=gate_errors,
                         missing=gate_errors.split("; "),
-                        evidence=changed,
+                        evidence=_gather_gate_evidence(gate_report) or changed,
                     )
                     save_plan_state(state)
                     return 1
-        # The physical gate already passed, so retry semantic verification
-        # without rerunning implementation on later attempts.
+        # Physical gate already passed; skip implementation on further iterations
         skip_impl = True
 
-        # --- LAYER 3: LLM semantic review (only reached after physical gate passes) ---
+        # LLM semantic review (layer 3)
         verify_payload = {
+            "id": str(selected_id),
             "title": selected_title,
             "acceptance": acceptance,
             "changed_files": changed,
@@ -1166,8 +1387,7 @@ def main(argv: list[str] | None = None) -> int:
             else [],
         }
         verify_prompt = (
-            "The physical validation gate has PASSED "
-            "(files exist, test command returned 0).\n"
+            "The physical validation gate has PASSED (files exist, test command returned 0).\n"
             "Now evaluate semantic completeness only.\n\n"
             "Rules:\n"
             "- Evaluate ONLY listed acceptance criteria for this work item.\n"
@@ -1178,31 +1398,77 @@ def main(argv: list[str] | None = None) -> int:
             f"PLAN excerpt:\n{plan_summary}\n\n"
             f"Work item:\n{json.dumps(verify_payload, indent=2)}\n"
         )
-        verdict = call_json_with_retry(
-            client=client,
-            stage="pm_verify",
-            model="pm",
-            system=SYSTEM_PM_VERIFY,
-            user=verify_prompt,
-            schema_hint=SCHEMA_PM_VERIFY,
-            temperature=None,
-            response_format={"type": "text"},
-        )
+        try:
+            verdict = call_json_with_retry(
+                client=client,
+                stage="pm_verify",
+                model="pm",
+                system=SYSTEM_PM_VERIFY,
+                user=verify_prompt,
+                schema_hint=SCHEMA_PM_VERIFY,
+                temperature=None,
+                response_format=PM_VERIFY_RESPONSE_FORMAT,
+                grammar=GBNF_PM_VERIFY,
+            )
+        except ValueError as exc:
+            # Could not parse JSON at all; mark as schema fail and try once
+            if attempt < max_retries - 1:
+                logger.warning(f"Invalid PM verdict JSON: {exc}")
+                verify_retry_notes = (
+                    "Previous PM verification returned invalid JSON. Please return a JSON "
+                    "object with keys 'status', 'missing', and 'notes'.\n\n"
+                )
+                attempt += 1
+                continue
+            else:
+                logger.error(
+                    "Task Partial: PM verify returned invalid JSON on final attempt."
+                )
+                update_state_item(
+                    state,
+                    str(selected_id),
+                    status="partial",
+                    notes="PM verification invalid JSON",
+                    missing=["pm_verify_schema_fail"],
+                    evidence=changed,
+                )
+                save_plan_state(state)
+                return 1
+
+        # Attempt to parse verdict using strict schema
         try:
             parsed_verdict = PMVerdict.model_validate(verdict)
         except Exception:
-            parsed_verdict = PMVerdict.model_validate(
-                {
-                    "status": "fail",
-                    "missing": [],
-                    "notes": "Invalid verdict response",
+            # Schema fail for verdict; attempt to coerce by stripping unknown keys
+            if isinstance(verdict, dict):
+                cleaned = {
+                    "status": verdict.get("status", "fail"),
+                    "missing": verdict.get("missing", []),
+                    "notes": verdict.get("notes", ""),
                 }
-            )
+                try:
+                    parsed_verdict = PMVerdict.model_validate(cleaned)
+                except Exception:
+                    parsed_verdict = PMVerdict.model_validate(
+                        {
+                            "status": "fail",
+                            "missing": [],
+                            "notes": "Invalid verdict response",
+                        }
+                    )
+            else:
+                parsed_verdict = PMVerdict.model_validate(
+                    {
+                        "status": "fail",
+                        "missing": [],
+                        "notes": "Invalid verdict response",
+                    }
+                )
 
+        # Evaluate verdict status
         if parsed_verdict.status != "pass":
             missing_list = parsed_verdict.missing
             notes = parsed_verdict.notes
-
             if attempt < max_retries - 1:
                 logger.warning(f"PM Verify Failed. Notes: {notes}")
                 verify_retry_notes = (
@@ -1212,6 +1478,7 @@ def main(argv: list[str] | None = None) -> int:
                     "Re-evaluate the same changed files against only the listed "
                     "acceptance criteria.\n\n"
                 )
+                attempt += 1
                 continue
             else:
                 logger.error(
@@ -1219,7 +1486,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 update_state_item(
                     state,
-                    selected_item_id,
+                    str(selected_id),
                     status="partial",
                     notes=notes or "PM verification failed",
                     missing=missing_list,
@@ -1227,12 +1494,15 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 save_plan_state(state)
                 return 1
-        # All 3 layers passed - exit the retry loop immediately
+
+        # All three layers passed; mark done
         break
+
+    # Completed successfully
     logger.success(f"Task Done: {selected_title} — all 3 layers passed.")
     update_state_item(
         state,
-        selected_item_id,
+        str(selected_id),
         status="done",
         notes=parsed_verdict.notes,
         missing=[],
