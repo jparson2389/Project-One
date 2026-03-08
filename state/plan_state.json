@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-03-07T14:01:25",
+  "updated_at": "2026-03-08T11:09:41",
   "items": [
     {
       "id": "phase_0__freeze_plugin_abi_contract",
@@ -130,9 +130,9 @@
       "phase": "Phase 1",
       "title": "Implement entitlement grace period contract",
       "instructions": "**Preconditions:** Phase 0 complete\n**Target File:** `src/aetherlink/core/grace_period.py`\n**Test File:** `tests/test_grace_period.py`\n**Behavior:** TTL cache with `GRACE` \u2192 `LOCKED` transition on expiry.\nStates: `ELIGIBLE`, `GRACE`, `LOCKED`. Expiry must be deterministic and\ntestable via injected clock.\n**Validation:** `uv run pytest tests/test_grace_period.py -vv`\n**Evidence:** `locked == True` asserted after simulated TTL expiry.\n**ARP Trigger:** Report actual vs expected state and the injected\ntimestamp used before any fix attempt.",
-      "status": "missing",
-      "notes": "",
-      "updated_at": "2026-03-05T04:42:21",
+      "status": "in_progress",
+      "notes": "Execution started",
+      "updated_at": "2026-03-08T11:09:41",
       "missing": [],
       "evidence": []
     },
