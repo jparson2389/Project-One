@@ -40,7 +40,7 @@ def main() -> int:
     ap.add_argument("--prompt", default=None)
     ap.add_argument("--prompt-file", default=None)
     ap.add_argument("--include", action="append", default=[])
-    ap.add_argument("--base-url", default="http://127.0.0.1:4000/v1")
+    ap.add_argument("--base-url", default="http://127.0.0.1:8080/v1")
     ap.add_argument("--api-key", default="anything")
     ap.add_argument("--temperature", type=float, default=None)
     ap.add_argument("--json-writes", action="store_true")

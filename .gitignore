@@ -23,10 +23,6 @@ screenshot*.png
 screenshot*.jpg
 
 # Cursor files
-.cursor/
-.agents/
-*.agents/
-.codex/
 *.codex
 .cursorrules
 .history/
@@ -92,7 +88,6 @@ build/
 Notes.txt
 structure.txt
 STRUCTUREDOUTPUT.md
-UPDATE.md
 Layout-Endgoal.txt
 .tmp.drivedownload/
 .tmp.driveupload/
