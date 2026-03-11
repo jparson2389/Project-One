@@ -14,7 +14,7 @@
 
 Aetherlink is a high-performance controller adapter ecosystem for gaming. It provides low-latency input translation and output emulation, while enabling high-FPS “sensing” (capture + inference) and safe extensibility via out-of-process workers. The system is designed so features ship as **plugins** (capture backends, UI panels, input providers, inference engines, remote-play bridges, etc.), with optional **Premium** gating.
 
-This revision adds specific plugin-driven capability requirements derived from the provided plugin feature overview (display/capture backends, input device support, remote-play integrations, 1000 Hz scripting VM characteristics, and an online resources system that can distribute single-file environment bundles and protected model packages). 
+This revision adds specific plugin-driven capability requirements derived from the provided plugin feature overview (display/capture backends, input device support, remote-play integrations, 1000 Hz scripting VM characteristics, and an online resources system that can distribute single-file environment bundles and protected model packages).
 
 ## G3 Framework — Cognitive Anchor
 
@@ -378,7 +378,7 @@ For all capture plugins:
 Aetherlink must provide at least two rendering strategies (as separate UI panel plugins), presented to users as “render modes” rather than exposing implementation names:
 
 - **CPU renderer:** lowest latency, accurate FPS, supports fullscreen; includes resolution/performance render modes.
-- **GPU renderer:** reduces CPU load and can support adjustable presentation FPS, but may have slightly higher latency; may require restart when unloaded. 
+- **GPU renderer:** reduces CPU load and can support adjustable presentation FPS, but may have slightly higher latency; may require restart when unloaded.
 
 ---
 
@@ -389,7 +389,7 @@ Minimum device categories (plugin-based):
 - XInput-class controllers (very low latency; should function without mandatory masking).
 - Direct support for modern PlayStation controllers (no third-party driver dependency).
 - Direct support for legacy PlayStation controllers where relevant.
-- Keyboard & mouse ingestion layer as a foundation for future KBM plugins. 
+- Keyboard & mouse ingestion layer as a foundation for future KBM plugins.
 
 ---
 
@@ -400,7 +400,7 @@ Remote-play integrations are plugins that:
 - connect via platform APIs
 - support secure login flows
 - provide event-driven, low-latency input/capture pipelines
-- maintain low CPU usage where possible 
+- maintain low CPU usage where possible
 
 > v1 decision: If remote-play ships in v1, it must still respect the core: deterministic I/O path, capability matrices, and the same worker supervision model.
 
@@ -410,13 +410,13 @@ Remote-play integrations are plugins that:
 
 ### 5.8.1 High-frequency scripting VM (P1 recommended)
 
-Provide a local scripting engine capable of high-frequency execution (e.g., 1000 Hz class), using a secure bytecode format and designed to integrate with remote-play and mid-frame injection patterns. 
+Provide a local scripting engine capable of high-frequency execution (e.g., 1000 Hz class), using a secure bytecode format and designed to integrate with remote-play and mid-frame injection patterns.
 
 **Key requirement:** scripting execution must not block the primary I/O loop; it should run in a bounded worker thread or out-of-process if safety demands.
 
 ### 5.8.2 Native inference engine (P1 recommended)
 
-Provide a C++ inference engine plugin that can run ONNX-style pipelines asynchronously and optionally produce an optimized engine artifact (“built” model), with support for protected/encrypted model packages. Aetherlink must not reuse third-party naming schemes for these packages. 
+Provide a C++ inference engine plugin that can run ONNX-style pipelines asynchronously and optionally produce an optimized engine artifact (“built” model), with support for protected/encrypted model packages. Aetherlink must not reuse third-party naming schemes for these packages.
 
 ---
 
@@ -456,7 +456,7 @@ Online Resources must support a single-file environment bundle format that:
 - supports update by publishing a new bundle version
 - installs with **one click** and streams install logs in UI
 
-**Naming requirement:** do not adopt external names (e.g., “.henv”). Aetherlink must define its own bundle term and extension (TBD), while supporting the same workflow concept. 
+**Naming requirement:** do not adopt external names (e.g., “.henv”). Aetherlink must define its own bundle term and extension (TBD), while supporting the same workflow concept.
 
 **Compatibility note:** environment bundles are not required to be compatible with other ecosystems/tools.
 
@@ -480,11 +480,11 @@ Online Resources must support a single-file environment bundle format that:
 ### 5.11.3 Publishing workflow (P1)
 
 - Role-gated “developer/publisher mode” for uploading scripts and environment bundles.
-- Support private resources and DRM-style locking for controlled distribution. 
+- Support private resources and DRM-style locking for controlled distribution.
 
 ### 5.11.4 Authentication for Online Resources
 
-Auth provider remains undecided globally, but the Online Resources system must support OAuth-style providers. A “social login” provider can be used for the resources ecosystem if selected. 
+Auth provider remains undecided globally, but the Online Resources system must support OAuth-style providers. A “social login” provider can be used for the resources ecosystem if selected.
 
 ---
 
