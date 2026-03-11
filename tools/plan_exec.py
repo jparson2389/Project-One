@@ -1008,7 +1008,7 @@ def main(argv: list[str] | None = None) -> int:
         pm_response = PMResponse.model_validate(queue)
         if len(pm_response.work_items) != 1:
             raise ValueError('pm_next must return exactly one work item')
-        queued_phase = pm_response.phase
+        queued_phase = pm_response.phase.strip()
         chosen_item = pm_response.work_items[0]
     except Exception as exc:
         logger.warning(f'[pm_next] invalid_pm_response={exc}')
@@ -1039,7 +1039,7 @@ def main(argv: list[str] | None = None) -> int:
             invalid_reason = 'unknown_id'
         else:
             expected = open_items_by_id[chosen_item.id]
-            if queued_phase != selected_phase:
+            if queued_phase != selected_phase.strip():
                 invalid_reason = 'phase_mismatch'
             elif chosen_item.title.strip() != str(expected.get('title', '')).strip():
                 invalid_reason = 'title_mismatch'

@@ -392,6 +392,60 @@ def test_main_rejects_multi_item_pm_next_and_falls_back(
     assert 'Title: Task' in observed_impl_prompt['user']
 
 
+def test_main_accepts_pm_next_phase_with_surrounding_whitespace(
+    tmp_path, monkeypatch
+) -> None:
+    root = tmp_path
+    _configure_main_harness(monkeypatch, root)
+    monkeypatch.setattr(plan_exec, 'run_ps', lambda *_args, **_kwargs: (0, 'ok'))
+
+    observed_impl_prompt: dict[str, str] = {}
+
+    def _fake_call_json_with_retry(**kwargs):
+        stage = kwargs['stage']
+        if stage == 'pm_next':
+            return {
+                'phase': ' Phase 0 ',
+                'work_items': [
+                    {
+                        'id': 'phase_0__task',
+                        'title': 'Task',
+                        'agent': 'architect',
+                        'acceptance': ['Ship the feature'],
+                        'notes': '',
+                    }
+                ],
+            }
+        if stage == 'impl_architect':
+            observed_impl_prompt['user'] = kwargs['user']
+            return {
+                'writes': [
+                    {
+                        'path': 'src/aetherlink/example.py',
+                        'content': (
+                            'def feature() -> int:\n'
+                            "    '''Return a value.'''\n"
+                            '    return 1\n'
+                        ),
+                    }
+                ],
+                'notes': 'implemented',
+            }
+        if stage == 'pm_verify':
+            return {'status': 'pass', 'missing': [], 'notes': 'Looks good.'}
+        raise AssertionError(f'Unexpected stage: {stage}')
+
+    monkeypatch.setattr(plan_exec, 'call_json_with_retry', _fake_call_json_with_retry)
+
+    result = plan_exec.main([])
+
+    assert result == 0
+    assert 'Ship the feature' in observed_impl_prompt['user']
+    assert 'Complete PLAN work item: Task' not in observed_impl_prompt['user']
+    assert 'ID: phase_0__task' in observed_impl_prompt['user']
+    assert 'Title: Task' in observed_impl_prompt['user']
+
+
 def test_main_uses_explicit_grammar_capability_for_remote_manifest(
     tmp_path, monkeypatch
 ) -> None:
