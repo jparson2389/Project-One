@@ -1,5 +1,6 @@
 """Pyside6 UI shell for main window implementation."""
 
+from PySide6.QtCore import QCoreApplication
 from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
@@ -29,8 +30,14 @@ class MainWindow(QMainWindow):
         # Add menu bar
         menu_bar = self.menuBar()
         file_menu = menu_bar.addMenu('&File')
-        file_menu.addAction('Exit', self.close)
+        file_menu.addAction('Exit', self._on_exit)
 
         # Add basic UI elements
         label = QLabel('Aetherlink UI Shell')
         layout.addWidget(label)
+
+    def _on_exit(self) -> None:
+        """Quit the application when Exit is triggered."""
+        app = QCoreApplication.instance()
+        if app is not None:
+            app.quit()
