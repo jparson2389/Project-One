@@ -42,13 +42,13 @@ except ModuleNotFoundError:  # pragma: no cover
         PLACEHOLDER_WRITE_PATHS,
     )
 
-_ALLOWED_PREFIXES_STR = ", ".join(sorted(ALLOWED_WRITE_PREFIXES))
-_ALLOWED_ROOT_STR = ", ".join(sorted(ALLOWED_ROOT_FILES))
-_DENIED_STR = ", ".join(sorted(DENIED_WRITE_PATHS))
-_PLACEHOLDER_STR = ", ".join(sorted(PLACEHOLDER_WRITE_PATHS))
-_AGENTS_MD_PATH = Path(__file__).resolve().parents[1] / "AGENTS.md"
+_ALLOWED_PREFIXES_STR = ', '.join(sorted(ALLOWED_WRITE_PREFIXES))
+_ALLOWED_ROOT_STR = ', '.join(sorted(ALLOWED_ROOT_FILES))
+_DENIED_STR = ', '.join(sorted(DENIED_WRITE_PATHS))
+_PLACEHOLDER_STR = ', '.join(sorted(PLACEHOLDER_WRITE_PATHS))
+_AGENTS_MD_PATH = Path(__file__).resolve().parents[1] / 'AGENTS.md'
 _AGENTS_MD = (
-    _AGENTS_MD_PATH.read_text(encoding="utf-8") if _AGENTS_MD_PATH.exists() else ""
+    _AGENTS_MD_PATH.read_text(encoding='utf-8') if _AGENTS_MD_PATH.exists() else ''
 )
 
 # ---------------------------------------------------------------------------
@@ -100,9 +100,9 @@ PATH RULES (ENFORCED BY VALIDATOR - violations will be rejected):
 # Compose the full implementation system prompt.  Append the contents of
 # AGENTS.md if present to provide further project context.
 IMPL_SYSTEM = SYSTEM_JSON_WRITES + (
-    f"\n\n# PROJECT RULES (AGENTS.md - authoritative)\n{_AGENTS_MD}\n"
+    f'\n\n# PROJECT RULES (AGENTS.md - authoritative)\n{_AGENTS_MD}\n'
     if _AGENTS_MD
-    else ""
+    else ''
 )
 
 # ---------------------------------------------------------------------------

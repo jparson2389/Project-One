@@ -15,7 +15,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         """Initialize the main window and its UI components."""
         super().__init__()
-        self.setWindowTitle("Aetherlink")
+        self.setWindowTitle('Aetherlink')
         self.setGeometry(100, 100, 800, 600)
 
         # Create main widget and layout
@@ -25,13 +25,13 @@ class MainWindow(QMainWindow):
 
         # Add status bar
         self.status_bar = self.statusBar()
-        self.status_bar.showMessage("Ready")
+        self.status_bar.showMessage('Ready')
 
         # Add menu bar
         menu_bar = self.menuBar()
-        file_menu = menu_bar.addMenu("&File")
-        file_menu.addAction("Exit", lambda: QCoreApplication.instance().quit())
+        file_menu = menu_bar.addMenu('&File')
+        file_menu.addAction('Exit', lambda: QCoreApplication.instance().quit())
 
         # Add basic UI elements
-        label = QLabel("Aetherlink UI Shell")
+        label = QLabel('Aetherlink UI Shell')
         layout.addWidget(label)

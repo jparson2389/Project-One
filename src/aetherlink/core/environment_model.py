@@ -9,4 +9,4 @@ class EnvironmentModel:
     def __init__(self) -> None:
         """Initialize the environment model."""
         self.id: str | None = None
-        self.name: str = ""
+        self.name: str = ''

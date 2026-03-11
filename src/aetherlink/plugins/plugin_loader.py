@@ -22,7 +22,7 @@ class PluginLoader:
 
         """
         self._abi_version = abi_version
-        self._logger = logger.bind(name="PluginLoader")
+        self._logger = logger.bind(name='PluginLoader')
 
     def load_plugin(self, module_path: str) -> type[PluginInterface]:
         """Load and validate a plugin class from a module path.
@@ -40,18 +40,18 @@ class PluginLoader:
         try:
             module = importlib.import_module(module_path)
         except (ModuleNotFoundError, ImportError) as exc:
-            raise PluginLoadError(f"Failed to load plugin: {module_path!r}") from exc
+            raise PluginLoadError(f'Failed to load plugin: {module_path!r}') from exc
 
-        plugin_class = getattr(module, "Plugin", None)
+        plugin_class = getattr(module, 'Plugin', None)
         if plugin_class is None:
-            raise PluginLoadError(f"No Plugin class found in {module_path!r}")
+            raise PluginLoadError(f'No Plugin class found in {module_path!r}')
 
-        plugin_version = getattr(plugin_class, "api_version", None)
+        plugin_version = getattr(plugin_class, 'api_version', None)
         if plugin_version != self._abi_version:
             raise PluginLoadError(
-                f"ABI version mismatch: expected {self._abi_version}, "
-                f"got {plugin_version!r}"
+                f'ABI version mismatch: expected {self._abi_version}, '
+                f'got {plugin_version!r}'
             )
 
-        self._logger.debug(f"Loaded plugin: {module_path}")
+        self._logger.debug(f'Loaded plugin: {module_path}')
         return plugin_class

@@ -76,7 +76,7 @@ def normalize_docstring_quotes(content: str) -> str:
     except tokenize.TokenError:
         # If tokenisation fails return the original content unchanged.
         return content
-    return "".join(result)
+    return ''.join(result)
 
 
 class WriteEntry(BaseModel):
@@ -92,7 +92,7 @@ class WriteEntry(BaseModel):
     path: str
     content: str
 
-    @model_validator(mode="after")
+    @model_validator(mode='after')
     def normalize_py_docstrings(self) -> WriteEntry:
         """Transform triple-double-quoted docstrings to triple-single.
 
@@ -102,13 +102,13 @@ class WriteEntry(BaseModel):
         hard error.  This deterministic transform eliminates repeated
         docstring warnings from the validation gate.
         """
-        if self.path.endswith(".py") and '"""' in self.content:
+        if self.path.endswith('.py') and '"""' in self.content:
             # Perform the normalisation.
             new_content = normalize_docstring_quotes(self.content)
             # If triple-double quotes remain, hard fail.
             if '"""' in new_content:
                 raise ValueError(
-                    "Triple-double-quoted docstrings remain after normalisation"
+                    'Triple-double-quoted docstrings remain after normalisation'
                 )
             self.content = new_content
         return self
@@ -116,6 +116,7 @@ class WriteEntry(BaseModel):
 
 class WritesPayload(BaseModel):
     """A JSON payload containing one or more file writes and optional notes."""
+
     writes: list[WriteEntry]
     notes: str
 
@@ -181,7 +182,7 @@ class ValidationReport(BaseModel):
 # ── Layer 1: Filesystem existence ────────────────────────────────────────────
 
 _TARGET_FILE_RE = re.compile(
-    r"\*\*Target Files?:\*\*\s*`([^`]+)`",
+    r'\*\*Target Files?:\*\*\s*`([^`]+)`',
     re.IGNORECASE,
 )
 
@@ -210,9 +211,9 @@ def check_filesystem_existence(
             layer=1,
             passed=bool(changed_files),
             evidence=changed_files,
-            errors=[] if changed_files else [
-                "No files were written and no Target File declared."
-            ],
+            errors=[]
+            if changed_files
+            else ['No files were written and no Target File declared.'],
             target_files=changed_files if changed_files else None,
         )
 
@@ -227,7 +228,7 @@ def check_filesystem_existence(
         elif Path(rel).as_posix() in changed_set:
             evidence.append(rel)  # was written this run
         else:
-            errors.append(f"MISSING: {rel}")
+            errors.append(f'MISSING: {rel}')
 
     return GateResult(
         layer=1,
@@ -241,15 +242,15 @@ def check_filesystem_existence(
 # ── Layer 2: Validation command ──────────────────────────────────────────────
 
 _INLINE_VALIDATION_RE = re.compile(
-    r"\*\*Validation:\*\*\s*`([^`]+)`",
+    r'\*\*Validation:\*\*\s*`([^`]+)`',
     re.IGNORECASE,
 )
 _MULTILINE_VALIDATION_RE = re.compile(
-    r"\*\*Validation:\*\*\s*\n\s*>?\s*`([^`]+)`",
+    r'\*\*Validation:\*\*\s*\n\s*>?\s*`([^`]+)`',
     re.IGNORECASE,
 )
 _COMMAND_RE = re.compile(
-    r"\*\*Command:\*\*\s*`([^`]+)`",
+    r'\*\*Command:\*\*\s*`([^`]+)`',
     re.IGNORECASE,
 )
 
@@ -265,7 +266,7 @@ def extract_validation_command(instructions: str) -> str | None:
         return multiline_match.group(1).strip()
 
     command_match = _COMMAND_RE.search(instructions)
-    if command_match and re.search(r"\*\*Validation:\*\*\s*Exit\s+0", instructions):
+    if command_match and re.search(r'\*\*Validation:\*\*\s*Exit\s+0', instructions):
         return command_match.group(1).strip()
 
     return None
@@ -295,17 +296,17 @@ def run_validation_command(
         )
         passed = result.returncode == 0
         # Capture separate stdout/stderr excerpts to aid diagnostics
-        stdout_excerpt = (result.stdout or "")[:2000].strip() or None
-        stderr_excerpt = (result.stderr or "")[:2000].strip() or None
+        stdout_excerpt = (result.stdout or '')[:2000].strip() or None
+        stderr_excerpt = (result.stderr or '')[:2000].strip() or None
         evidence: list[str] = []
         errors: list[str] = []
         if passed:
             # Provide a short combined excerpt as human evidence
-            combined = ((result.stdout or "") + (result.stderr or "")).strip()
+            combined = ((result.stdout or '') + (result.stderr or '')).strip()
             if combined:
                 evidence.append(combined[:2000])
         else:
-            combined = ((result.stdout or "") + (result.stderr or "")).strip()
+            combined = ((result.stdout or '') + (result.stderr or '')).strip()
             if combined:
                 errors.append(combined[:2000])
 
@@ -317,16 +318,22 @@ def run_validation_command(
             # Attempt to detect pytest failing test lines
             for line in combined.splitlines():
                 line_strip = line.strip()
-                if not failing_test and "::" in line_strip and line_strip.startswith("FAILED "):
+                if (
+                    not failing_test
+                    and '::' in line_strip
+                    and line_strip.startswith('FAILED ')
+                ):
                     # Example: FAILED tests/test_example.py::test_func - AssertionError: message
                     parts = line_strip.split(None, 1)
                     if len(parts) > 1:
-                        failing_test = parts[1].split(" - ")[0].strip()
+                        failing_test = parts[1].split(' - ')[0].strip()
                 # Detect assertion errors
-                if "AssertionError" in line_strip and not assertion_excerpt:
+                if 'AssertionError' in line_strip and not assertion_excerpt:
                     assertion_excerpt = line_strip
                 # Detect exception tracebacks
-                if ("Traceback" in line_strip or "Error:" in line_strip) and not exception_excerpt:
+                if (
+                    'Traceback' in line_strip or 'Error:' in line_strip
+                ) and not exception_excerpt:
                     exception_excerpt = line_strip
         return GateResult(
             layer=2,
@@ -345,14 +352,14 @@ def run_validation_command(
         return GateResult(
             layer=2,
             passed=False,
-            errors=[f"Validation command timed out after {timeout}s: {command}"],
+            errors=[f'Validation command timed out after {timeout}s: {command}'],
             command=command,
         )
     except Exception as exc:
         return GateResult(
             layer=2,
             passed=False,
-            errors=[f"Validation command raised exception: {exc}"],
+            errors=[f'Validation command raised exception: {exc}'],
             command=command,
         )
 
@@ -419,14 +426,16 @@ def run_validation_gate(
     }
     # Prefer diagnostics from layer2 if executed, else from layer1
     src = layers[-1]
-    report_kwargs.update({
-        'command': getattr(src, 'command', None),
-        'returncode': getattr(src, 'returncode', None),
-        'stdout_excerpt': getattr(src, 'stdout_excerpt', None),
-        'stderr_excerpt': getattr(src, 'stderr_excerpt', None),
-        'target_files': getattr(l1, 'target_files', None),
-        'failing_test': getattr(src, 'failing_test', None),
-        'assertion_excerpt': getattr(src, 'assertion_excerpt', None),
-        'exception_excerpt': getattr(src, 'exception_excerpt', None),
-    })
+    report_kwargs.update(
+        {
+            'command': getattr(src, 'command', None),
+            'returncode': getattr(src, 'returncode', None),
+            'stdout_excerpt': getattr(src, 'stdout_excerpt', None),
+            'stderr_excerpt': getattr(src, 'stderr_excerpt', None),
+            'target_files': getattr(l1, 'target_files', None),
+            'failing_test': getattr(src, 'failing_test', None),
+            'assertion_excerpt': getattr(src, 'assertion_excerpt', None),
+            'exception_excerpt': getattr(src, 'exception_excerpt', None),
+        }
+    )
     return ValidationReport(**report_kwargs)

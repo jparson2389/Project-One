@@ -7,18 +7,18 @@ from typing import Literal
 
 SLOT_ALIGNMENT_BYTES = 64
 RING_LAYOUT_VERSION = 1
-RING_MAGIC = b"AETHFRM1"
+RING_MAGIC = b'AETHFRM1'
 
 
-type PixelFormat = Literal["BGR24", "BGRA32", "RGBA32", "NV12", "GRAY8"]
+type PixelFormat = Literal['BGR24', 'BGRA32', 'RGBA32', 'NV12', 'GRAY8']
 
 
 _BYTES_PER_PIXEL: dict[PixelFormat, int] = {
-    "BGR24": 3,
-    "BGRA32": 4,
-    "RGBA32": 4,
-    "NV12": 2,
-    "GRAY8": 1,
+    'BGR24': 3,
+    'BGRA32': 4,
+    'RGBA32': 4,
+    'NV12': 2,
+    'GRAY8': 1,
 }
 
 
@@ -37,22 +37,22 @@ class FrameRingHeader:
     def validate(self) -> None:
         """Validate structural invariants for the ring header."""
         if self.magic != RING_MAGIC:
-            msg = "Invalid ring magic."
+            msg = 'Invalid ring magic.'
             raise ValueError(msg)
         if self.layout_version != RING_LAYOUT_VERSION:
-            msg = "Unsupported ring layout version."
+            msg = 'Unsupported ring layout version.'
             raise ValueError(msg)
         if self.width <= 0 or self.height <= 0:
-            msg = "Frame dimensions must be positive."
+            msg = 'Frame dimensions must be positive.'
             raise ValueError(msg)
         if self.slot_count < 2:
-            msg = "slot_count must be at least 2 for producer/consumer overlap."
+            msg = 'slot_count must be at least 2 for producer/consumer overlap.'
             raise ValueError(msg)
         if self.slot_stride_bytes <= 0:
-            msg = "slot_stride_bytes must be positive."
+            msg = 'slot_stride_bytes must be positive.'
             raise ValueError(msg)
         if self.slot_stride_bytes % SLOT_ALIGNMENT_BYTES != 0:
-            msg = "slot_stride_bytes must be aligned to 64 bytes."
+            msg = 'slot_stride_bytes must be aligned to 64 bytes.'
             raise ValueError(msg)
 
         minimum_stride = expected_slot_size_bytes(
@@ -61,7 +61,7 @@ class FrameRingHeader:
             pixel_format=self.pixel_format,
         )
         if self.slot_stride_bytes < minimum_stride:
-            msg = "slot_stride_bytes is too small for one full frame."
+            msg = 'slot_stride_bytes is too small for one full frame.'
             raise ValueError(msg)
 
 
@@ -76,19 +76,19 @@ class FrameSlotDescriptor:
     def validate(self, *, slot_count: int, slot_stride_bytes: int) -> None:
         """Validate descriptor alignment and containment within the ring."""
         if self.slot_index < 0 or self.slot_index >= slot_count:
-            msg = "slot_index out of range."
+            msg = 'slot_index out of range.'
             raise ValueError(msg)
         if self.offset_bytes < 0:
-            msg = "offset_bytes must be non-negative."
+            msg = 'offset_bytes must be non-negative.'
             raise ValueError(msg)
         if self.length_bytes <= 0:
-            msg = "length_bytes must be positive."
+            msg = 'length_bytes must be positive.'
             raise ValueError(msg)
         if self.length_bytes > slot_stride_bytes:
-            msg = "length_bytes exceeds slot_stride_bytes."
+            msg = 'length_bytes exceeds slot_stride_bytes.'
             raise ValueError(msg)
         if self.offset_bytes % SLOT_ALIGNMENT_BYTES != 0:
-            msg = "offset_bytes must be 64-byte aligned."
+            msg = 'offset_bytes must be 64-byte aligned.'
             raise ValueError(msg)
 
 
@@ -103,7 +103,7 @@ class SharedMemoryLayout:
         """Validate layout invariants for the header and slot descriptors."""
         self.header.validate()
         if len(self.slots) != self.header.slot_count:
-            msg = "Slot descriptor count does not match header slot_count."
+            msg = 'Slot descriptor count does not match header slot_count.'
             raise ValueError(msg)
 
         expected_offset = 0
@@ -113,7 +113,7 @@ class SharedMemoryLayout:
                 slot_stride_bytes=self.header.slot_stride_bytes,
             )
             if descriptor.offset_bytes != expected_offset:
-                msg = "Slot offsets must be contiguous and deterministic."
+                msg = 'Slot offsets must be contiguous and deterministic.'
                 raise ValueError(msg)
             expected_offset += self.header.slot_stride_bytes
 
@@ -123,7 +123,7 @@ def expected_slot_size_bytes(
 ) -> int:
     """Return frame payload size rounded up to 64-byte slot alignment."""
     if width <= 0 or height <= 0:
-        msg = "Dimensions must be positive."
+        msg = 'Dimensions must be positive.'
         raise ValueError(msg)
 
     bytes_per_pixel = _BYTES_PER_PIXEL[pixel_format]
