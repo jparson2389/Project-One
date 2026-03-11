@@ -14,7 +14,7 @@
 
 Aetherlink is a high-performance controller adapter ecosystem for gaming. It provides low-latency input translation and output emulation, while enabling high-FPS “sensing” (capture + inference) and safe extensibility via out-of-process workers. The system is designed so features ship as **plugins** (capture backends, UI panels, input providers, inference engines, remote-play bridges, etc.), with optional **Premium** gating.
 
-This revision adds specific plugin-driven capability requirements derived from the provided plugin feature overview (display/capture backends, input device support, remote-play integrations, 1000 Hz scripting VM characteristics, and an online resources system that can distribute single-file environment bundles and protected model packages). fileciteturn4file0
+This revision adds specific plugin-driven capability requirements derived from the provided plugin feature overview (display/capture backends, input device support, remote-play integrations, 1000 Hz scripting VM characteristics, and an online resources system that can distribute single-file environment bundles and protected model packages). 
 
 ## G3 Framework — Cognitive Anchor
 
@@ -192,6 +192,7 @@ Each plugin must expose:
 
 - All shipped plugins must be **publisher-signed**.
 - The host must verify **signature + ABI/api compatibility** before any load attempt.
+- The host must block unsigned or tampered plugins and show actionable errors.
 - **Premium gating (hard rule):** premium plugins **must not be loadable** until the user completes a purchase and the entitlement check succeeds.
   - “Not loadable” means:
     - the DLL is not loaded into the process
@@ -201,12 +202,6 @@ Each plugin must expose:
   - visible in the plugin catalog as **Premium (Locked)** with required tier/add-on
   - attempts to activate show a purchase CTA and a brief capability summary
   - after purchase, an entitlement refresh enables loading **without reinstall** (restart optional if the plugin requires it)
-
-### 5.1.3 Trust, signing, and gating
-
-- All shipped plugins must be publisher-signed.
-- Premium plugins may ship with the installer, but they are **not loadable** until entitlement checks succeed.
-- Host blocks unsigned/tampered plugins and shows actionable errors.
 
 ### 5.1.4 On-demand plugin loading
 
@@ -383,7 +378,7 @@ For all capture plugins:
 Aetherlink must provide at least two rendering strategies (as separate UI panel plugins), presented to users as “render modes” rather than exposing implementation names:
 
 - **CPU renderer:** lowest latency, accurate FPS, supports fullscreen; includes resolution/performance render modes.
-- **GPU renderer:** reduces CPU load and can support adjustable presentation FPS, but may have slightly higher latency; may require restart when unloaded. fileciteturn4file0
+- **GPU renderer:** reduces CPU load and can support adjustable presentation FPS, but may have slightly higher latency; may require restart when unloaded. 
 
 ---
 
@@ -394,7 +389,7 @@ Minimum device categories (plugin-based):
 - XInput-class controllers (very low latency; should function without mandatory masking).
 - Direct support for modern PlayStation controllers (no third-party driver dependency).
 - Direct support for legacy PlayStation controllers where relevant.
-- Keyboard & mouse ingestion layer as a foundation for future KBM plugins. fileciteturn4file0
+- Keyboard & mouse ingestion layer as a foundation for future KBM plugins. 
 
 ---
 
@@ -405,7 +400,7 @@ Remote-play integrations are plugins that:
 - connect via platform APIs
 - support secure login flows
 - provide event-driven, low-latency input/capture pipelines
-- maintain low CPU usage where possible fileciteturn4file0
+- maintain low CPU usage where possible 
 
 > v1 decision: If remote-play ships in v1, it must still respect the core: deterministic I/O path, capability matrices, and the same worker supervision model.
 
@@ -415,13 +410,13 @@ Remote-play integrations are plugins that:
 
 ### 5.8.1 High-frequency scripting VM (P1 recommended)
 
-Provide a local scripting engine capable of high-frequency execution (e.g., 1000 Hz class), using a secure bytecode format and designed to integrate with remote-play and mid-frame injection patterns. fileciteturn4file0
+Provide a local scripting engine capable of high-frequency execution (e.g., 1000 Hz class), using a secure bytecode format and designed to integrate with remote-play and mid-frame injection patterns. 
 
 **Key requirement:** scripting execution must not block the primary I/O loop; it should run in a bounded worker thread or out-of-process if safety demands.
 
 ### 5.8.2 Native inference engine (P1 recommended)
 
-Provide a C++ inference engine plugin that can run ONNX-style pipelines asynchronously and optionally produce an optimized engine artifact (“built” model), with support for protected/encrypted model packages. Aetherlink must not reuse third-party naming schemes for these packages. fileciteturn4file0
+Provide a C++ inference engine plugin that can run ONNX-style pipelines asynchronously and optionally produce an optimized engine artifact (“built” model), with support for protected/encrypted model packages. Aetherlink must not reuse third-party naming schemes for these packages. 
 
 ---
 
@@ -461,7 +456,7 @@ Online Resources must support a single-file environment bundle format that:
 - supports update by publishing a new bundle version
 - installs with **one click** and streams install logs in UI
 
-**Naming requirement:** do not adopt external names (e.g., “.henv”). Aetherlink must define its own bundle term and extension (TBD), while supporting the same workflow concept. fileciteturn4file0
+**Naming requirement:** do not adopt external names (e.g., “.henv”). Aetherlink must define its own bundle term and extension (TBD), while supporting the same workflow concept. 
 
 **Compatibility note:** environment bundles are not required to be compatible with other ecosystems/tools.
 
@@ -485,11 +480,11 @@ Online Resources must support a single-file environment bundle format that:
 ### 5.11.3 Publishing workflow (P1)
 
 - Role-gated “developer/publisher mode” for uploading scripts and environment bundles.
-- Support private resources and DRM-style locking for controlled distribution. fileciteturn4file0
+- Support private resources and DRM-style locking for controlled distribution. 
 
 ### 5.11.4 Authentication for Online Resources
 
-Auth provider remains undecided globally, but the Online Resources system must support OAuth-style providers. A “social login” provider can be used for the resources ecosystem if selected. fileciteturn4file0
+Auth provider remains undecided globally, but the Online Resources system must support OAuth-style providers. A “social login” provider can be used for the resources ecosystem if selected. 
 
 ---
 
