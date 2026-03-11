@@ -1,6 +1,5 @@
 """Pyside6 UI shell for main window implementation."""
 
-from PySide6.QtCore import QCoreApplication
 from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
@@ -30,7 +29,7 @@ class MainWindow(QMainWindow):
         # Add menu bar
         menu_bar = self.menuBar()
         file_menu = menu_bar.addMenu('&File')
-        file_menu.addAction('Exit', lambda: QCoreApplication.instance().quit())
+        file_menu.addAction('Exit', self.close)
 
         # Add basic UI elements
         label = QLabel('Aetherlink UI Shell')
