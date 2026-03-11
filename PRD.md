@@ -19,6 +19,7 @@ This revision adds specific plugin-driven capability requirements derived from t
 ## G3 Framework — Cognitive Anchor
 
 ### Guidelines (Project Context + Intent)
+
 - **Core thesis:** Microkernel host where everything is a plugin. No exceptions.
 - **Platform:** Windows only (v1). No cross-platform abstractions.
 - **Tech stack:** C++20 (native plugins), Python 3.12 (workers + UI), PySide6 6.9.x
@@ -29,6 +30,7 @@ This revision adds specific plugin-driven capability requirements derived from t
   Host Stability > Security/Signing > Feature Completeness > Performance > UX Polish
 
 ### Guidance (Interpretive Logic)
+
 - When a PRD section is ambiguous, default to the most restrictive interpretation.
 - "Contract" items (ABI, proto, shared memory layout) are frozen after Phase 0.
   Any agent that modifies a frozen contract MUST log a breaking-change entry.
@@ -38,6 +40,7 @@ This revision adds specific plugin-driven capability requirements derived from t
   traceability update.
 
 ### Guardrails (Hard Boundaries + Automated Gates)
+
 - NEVER load a premium plugin DLL without a valid entitlement token. A
   grace-period token (GRACE state) is conditionally valid: loading is
   permitted but the user must be warned of imminent expiry.
@@ -77,12 +80,12 @@ This revision adds specific plugin-driven capability requirements derived from t
 
 ## 3) Role-Based Behavioral Models
 
-| Role | Access Scope | Entitlement Level | Key Behaviors |
-| --- | --- | --- | --- |
-| **Power Gamer** | Profile CRUD, mapping, fast-switch | Free/Pro | No admin, no billing, no env management |
-| **Vision/ML Tinkerer** | Env create/delete, resource install, capture config | Pro/Vision | No billing admin, no user management |
-| **Accessibility Modder** | Scripting VM, calibration tooling, automation primitives | Pro | No capture premium features unless entitled |
-| **Admin/Operator** | Full entitlement + user management, audit log | Enterprise | Can revoke sessions, assign tiers, view all logs |
+| Role                     | Access Scope                                             | Entitlement Level | Key Behaviors                                    |
+| ------------------------ | -------------------------------------------------------- | ----------------- | ------------------------------------------------ |
+| **Power Gamer**          | Profile CRUD, mapping, fast-switch                       | Free/Pro          | No admin, no billing, no env management          |
+| **Vision/ML Tinkerer**   | Env create/delete, resource install, capture config      | Pro/Vision        | No billing admin, no user management             |
+| **Accessibility Modder** | Scripting VM, calibration tooling, automation primitives | Pro               | No capture premium features unless entitled      |
+| **Admin/Operator**       | Full entitlement + user management, audit log            | Enterprise        | Can revoke sessions, assign tiers, view all logs |
 
 ---
 
@@ -114,14 +117,15 @@ Everything else ships as plugins.
 The following are frozen after Phase 0 completion. No agent may modify these
 without an explicit breaking-change log entry and human sign-off:
 
-| File | Frozen After | Breaking Change Log Path |
-| --- | --- | --- |
-| `src/aetherlink/plugins/include/plugin_system.hpp` | Phase 0 | `docs/breaking-changes/abi.md` |
-| `src/aetherlink/proto/capture.proto` | Phase 0 | `docs/breaking-changes/proto.md` |
-| `src/aetherlink/core/shared_memory_layout.py` | Phase 0 | `docs/breaking-changes/shmem.md` |
-| `src/aetherlink/core/entitlements.py` (state machine) | Phase 4 | `docs/breaking-changes/entitlements.md` |
+| File                                                  | Frozen After | Breaking Change Log Path                |
+| ----------------------------------------------------- | ------------ | --------------------------------------- |
+| `src/aetherlink/plugins/include/plugin_system.hpp`    | Phase 0      | `docs/breaking-changes/abi.md`          |
+| `src/aetherlink/proto/capture.proto`                  | Phase 0      | `docs/breaking-changes/proto.md`        |
+| `src/aetherlink/core/shared_memory_layout.py`         | Phase 0      | `docs/breaking-changes/shmem.md`        |
+| `src/aetherlink/core/entitlements.py` (state machine) | Phase 4      | `docs/breaking-changes/entitlements.md` |
 
 Agents that detect a required change to a frozen file MUST:
+
 1. Stop execution.
 2. Report: "FROZEN CONTRACT MODIFICATION REQUIRED: <file> — <reason>."
 3. Await human instruction before proceeding.
@@ -129,6 +133,7 @@ Agents that detect a required change to a frozen file MUST:
 ### 4.5 Agent Boundary Rules
 
 **NEVER:**
+
 - Load premium plugin DLLs without a valid entitlement token
 - Execute unsigned artifacts (plugins, environment bundles, model packages)
 - Write to `src/plugins/*` (use `src/aetherlink/plugins/*`)
@@ -137,6 +142,7 @@ Agents that detect a required change to a frozen file MUST:
 - Use `print()` — use `loguru.logger` instead
 
 **ASK FIRST:**
+
 - Any modification to a frozen contract (see 4.4)
 - Changes to entitlement state machine semantics
 - Auth provider selection or changes
@@ -145,6 +151,7 @@ Agents that detect a required change to a frozen file MUST:
 - Remote-play v1 vs v1.1 scoping decisions
 
 **ALWAYS:**
+
 - Run `uv run ruff check && uv run pytest` before marking a work item done
 - Write tests first (TDD) — prove failure before writing implementation
 - Use Google-format docstrings on all public Python functions
@@ -209,46 +216,49 @@ Each plugin must expose:
 ### 5.1.5 Critical State Machines (TAR Format)
 
 #### Entitlement / Premium Plugin Gating
+
 `[ENT-TAR-01] -> [PRD-§5.1.3, §7]`
 
-| Trigger | Condition | Action | Result State |
-| --- | --- | --- | --- |
-| `Host::LoadPlugin(plugin_id)` called | Plugin is NOT premium | Load normally | `LOADED` |
-| `Host::LoadPlugin(plugin_id)` called | Plugin is premium, entitlement valid | Load plugin | `LOADED` |
-| `Host::LoadPlugin(plugin_id)` called | Plugin is premium, entitlement invalid | Block load, show purchase CTA | `LOCKED` |
-| `Host::LoadPlugin(plugin_id)` called | Plugin is premium, grace period active | Load plugin, warn user of expiry | `GRACE` |
-| `Host::LoadPlugin(plugin_id)` called | Plugin is premium, grace period expired | Block load, show renewal CTA | `LOCKED` |
-| Purchase completed | Entitlement token received | Refresh entitlement cache | `ELIGIBLE` |
-| Entitlement refresh | Token valid | Enable plugin without reinstall | `LOADED` |
-| TTL expires (offline) | Grace period active | Warn user, maintain access | `GRACE` |
-| TTL expires (offline) | Grace period expired | Lock premium features | `LOCKED` |
+| Trigger                              | Condition                               | Action                           | Result State |
+| ------------------------------------ | --------------------------------------- | -------------------------------- | ------------ |
+| `Host::LoadPlugin(plugin_id)` called | Plugin is NOT premium                   | Load normally                    | `LOADED`     |
+| `Host::LoadPlugin(plugin_id)` called | Plugin is premium, entitlement valid    | Load plugin                      | `LOADED`     |
+| `Host::LoadPlugin(plugin_id)` called | Plugin is premium, entitlement invalid  | Block load, show purchase CTA    | `LOCKED`     |
+| `Host::LoadPlugin(plugin_id)` called | Plugin is premium, grace period active  | Load plugin, warn user of expiry | `GRACE`      |
+| `Host::LoadPlugin(plugin_id)` called | Plugin is premium, grace period expired | Block load, show renewal CTA     | `LOCKED`     |
+| Purchase completed                   | Entitlement token received              | Refresh entitlement cache        | `ELIGIBLE`   |
+| Entitlement refresh                  | Token valid                             | Enable plugin without reinstall  | `LOADED`     |
+| TTL expires (offline)                | Grace period active                     | Warn user, maintain access       | `GRACE`      |
+| TTL expires (offline)                | Grace period expired                    | Lock premium features            | `LOCKED`     |
 
 GRACE state: entitlement is conditionally valid; premium plugins may load with
 expiry warning. LOCKED state: entitlement invalid; premium load blocked.
 
 #### Python Worker Lifecycle
+
 `[WRK-TAR-01] -> [PRD-§5.9]`
 
-| Trigger | Condition | Action | Result State |
-| --- | --- | --- | --- |
-| Worker start requested | Env valid, supervisor running | Spawn subprocess, start heartbeat | `STARTING` |
-| Heartbeat received | Within timeout | Update health state | `RUNNING` |
-| Heartbeat missed | Within retry window | Increment miss counter | `DEGRADED` |
-| Heartbeat missed | Retry window exceeded | Kill + restart with backoff | `RECOVERING` |
-| Worker crash detected | Any | Log crash, trigger restart | `RECOVERING` |
-| Restart succeeds | — | Resume heartbeat monitoring | `RUNNING` |
-| Restart fails 3x | — | Mark worker FAILED, alert UI | `FAILED` |
+| Trigger                | Condition                     | Action                            | Result State |
+| ---------------------- | ----------------------------- | --------------------------------- | ------------ |
+| Worker start requested | Env valid, supervisor running | Spawn subprocess, start heartbeat | `STARTING`   |
+| Heartbeat received     | Within timeout                | Update health state               | `RUNNING`    |
+| Heartbeat missed       | Within retry window           | Increment miss counter            | `DEGRADED`   |
+| Heartbeat missed       | Retry window exceeded         | Kill + restart with backoff       | `RECOVERING` |
+| Worker crash detected  | Any                           | Log crash, trigger restart        | `RECOVERING` |
+| Restart succeeds       | —                             | Resume heartbeat monitoring       | `RUNNING`    |
+| Restart fails 3x       | —                             | Mark worker FAILED, alert UI      | `FAILED`     |
 
 #### Environment Bundle Install
+
 `[ENV-TAR-01] -> [PRD-§5.10.2]`
 
-| Trigger | Condition | Action | Result State |
-| --- | --- | --- | --- |
-| Install initiated | SHA-256 valid, signature valid | Extract bundle, stream logs | `INSTALLING` |
-| Install initiated | SHA-256 mismatch | Reject, show error | `FAILED` |
-| `uv sync` completes | Exit 0 | Validate imports | `VERIFYING` |
-| Validation passes | All imports resolve | Mark env ready | `READY` |
-| Validation fails | Import error | Show failed deps, offer repair | `FAILED` |
+| Trigger             | Condition                      | Action                         | Result State |
+| ------------------- | ------------------------------ | ------------------------------ | ------------ |
+| Install initiated   | SHA-256 valid, signature valid | Extract bundle, stream logs    | `INSTALLING` |
+| Install initiated   | SHA-256 mismatch               | Reject, show error             | `FAILED`     |
+| `uv sync` completes | Exit 0                         | Validate imports               | `VERIFYING`  |
+| Validation passes   | All imports resolve            | Mark env ready                 | `READY`      |
+| Validation fails    | Import error                   | Show failed deps, offer repair | `FAILED`     |
 
 ---
 
@@ -281,13 +291,13 @@ expiry warning. LOCKED state: entitlement invalid; premium load blocked.
 **UI contract (v1):** OpenCV Capture exposes exactly these controls:
 
 1. **Capture source** (dropdown)
-   - User selects a _capture device endpoint_ (e.g., capture card, OBS Virtual Camera, other camera endpoints).
+    - User selects a _capture device endpoint_ (e.g., capture card, OBS Virtual Camera, other camera endpoints).
 2. **Settings** (tab)
-   - **Frame rate** dropdown: **30, 60, 120, 240**
-   - **Resolution** dropdown:
-     - **720p** (1280×720)
-     - **1080p** (1920×1080)
-     - **1440p** (2560×1440)
+    - **Frame rate** dropdown: **30, 60, 120, 240**
+    - **Resolution** dropdown:
+        - **720p** (1280×720)
+        - **1080p** (1920×1080)
+        - **1440p** (2560×1440)
 
 **Important constraint:** Not all devices can achieve all target FPS/resolution combinations. The UI must:
 
@@ -533,14 +543,14 @@ Auth provider remains undecided globally, but the Online Resources system must s
 
 ## 9) Success Metrics (Machine-Verifiable)
 
-| Metric | Target | Verification Method | Evidence Artifact |
-| --- | --- | --- | --- |
-| Install -> working baseline mapping | Median <= 5 min on clean Win11 VM | Automated e2e test script | `logs/onboarding_timing.json` |
-| Environment bundle install success rate | >= 95% over 100 simulated installs | `uv run pytest tests/test_bundle_installer.py --count=100` | `logs/bundle_install_report.json` |
-| Host survivability on worker crash | >= 99.9% (host stays running) | `uv run pytest tests/stress/test_worker_crash_loop.py -n 1000` | `logs/survivability_report.json` |
-| Capture stability at 60 FPS baseline | >= 95% sessions without sustained drops | `uv run pytest tests/integration/test_capture_stability.py` | `logs/capture_stability.json` |
-| Premium plugin blocked without entitlement | 100% block rate | `uv run pytest tests/test_plugin_loader.cpp` | `logs/entitlement_gate_report.json` |
-| Unsigned artifact execution | 0 occurrences | `uv run pytest tests/test_security.py` | `logs/security_audit.json` |
+| Metric                                     | Target                                  | Verification Method                                            | Evidence Artifact                   |
+| ------------------------------------------ | --------------------------------------- | -------------------------------------------------------------- | ----------------------------------- |
+| Install -> working baseline mapping        | Median <= 5 min on clean Win11 VM       | Automated e2e test script                                      | `logs/onboarding_timing.json`       |
+| Environment bundle install success rate    | >= 95% over 100 simulated installs      | `uv run pytest tests/test_bundle_installer.py --count=100`     | `logs/bundle_install_report.json`   |
+| Host survivability on worker crash         | >= 99.9% (host stays running)           | `uv run pytest tests/stress/test_worker_crash_loop.py -n 1000` | `logs/survivability_report.json`    |
+| Capture stability at 60 FPS baseline       | >= 95% sessions without sustained drops | `uv run pytest tests/integration/test_capture_stability.py`    | `logs/capture_stability.json`       |
+| Premium plugin blocked without entitlement | 100% block rate                         | `uv run pytest tests/test_plugin_loader.cpp`                   | `logs/entitlement_gate_report.json` |
+| Unsigned artifact execution                | 0 occurrences                           | `uv run pytest tests/test_security.py`                         | `logs/security_audit.json`          |
 
 ---
 
