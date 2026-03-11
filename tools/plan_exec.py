@@ -41,12 +41,14 @@ instead of a `for` loop so that certain repairs do not consume an attempt.
 try:
     # Prefer the local tools package if available
     from tools.json_utils import (
+        PM_NEXT_RESPONSE_FORMAT,
         PM_VERIFY_RESPONSE_FORMAT,
         WRITES_RESPONSE_FORMAT,
         safe_json_from_model,
     )
 except ModuleNotFoundError:  # pragma: no cover
     from json_utils import (  # type: ignore[no-redef]
+        PM_NEXT_RESPONSE_FORMAT,
         PM_VERIFY_RESPONSE_FORMAT,
         WRITES_RESPONSE_FORMAT,
         safe_json_from_model,
@@ -207,6 +209,7 @@ class AgentManifest(BaseModel):
 
     base_url: str
     api_key: str
+    grammar_capable: bool | None = None
 
 
 class PlanWorkItem(BaseModel):
@@ -603,12 +606,20 @@ def apply_writes_relpaths(payload: dict[str, Any]) -> list[str]:
     return [str(p.relative_to(ROOT)) for p in changed]
 
 
+def is_grammar_capable(manifest: AgentManifest) -> bool:
+    """Resolve grammar capability from explicit manifest config or URL heuristic."""
+    if manifest.grammar_capable is not None:
+        return manifest.grammar_capable
+    return is_local_backend(manifest.base_url)
+
+
 def call(
     client: OpenAI,
     model: str,
     system: str,
     user: str,
     temperature: float | None = None,
+    grammar_capable: bool = False,
     response_format: Any = None,
     grammar: str | None = None,
 ) -> ModelCall:
@@ -621,8 +632,7 @@ def call(
             {'role': 'user', 'content': user},
         ],
     }
-    base_url = str(getattr(client, 'base_url', ''))
-    if grammar and is_local_backend(base_url):
+    if grammar and grammar_capable:
         kwargs['extra_body'] = {'grammar': grammar}
     elif response_format is not None:
         kwargs['response_format'] = response_format
@@ -653,6 +663,7 @@ def call_json_with_retry(
     user: str,
     schema_hint: str,
     temperature: float | None = None,
+    grammar_capable: bool = False,
     response_format: dict | None = None,
     grammar: str | None = None,
 ) -> dict[str, Any]:
@@ -677,6 +688,7 @@ def call_json_with_retry(
         system,
         user,
         temperature=temperature,
+        grammar_capable=grammar_capable,
         response_format=response_format,
         grammar=grammar,
     )
@@ -711,6 +723,7 @@ def call_json_with_retry(
         system,
         repair_user,
         temperature=None,
+        grammar_capable=grammar_capable,
         response_format=response_format,
         grammar=grammar,
     )
@@ -891,11 +904,14 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv if argv is not None else sys.argv[1:])
 
     # Load manifest and initialise API client
-    manifest = json.loads((ROOT / args.manifest).read_text(encoding='utf-8'))
+    manifest = AgentManifest.model_validate(
+        json.loads((ROOT / args.manifest).read_text(encoding='utf-8'))
+    )
+    grammar_capable = is_grammar_capable(manifest)
     _ctx_monitor = ContextMonitor()
     client = OpenAI(
-        base_url=manifest['base_url'],
-        api_key=manifest['api_key'],
+        base_url=manifest.base_url,
+        api_key=manifest.api_key,
         timeout=300,
     )
 
@@ -978,7 +994,8 @@ def main(argv: list[str] | None = None) -> int:
             user=pm_prompt,
             schema_hint=SCHEMA_PM_NEXT,
             temperature=None,
-            response_format={'type': 'text'},
+            grammar_capable=grammar_capable,
+            response_format=PM_NEXT_RESPONSE_FORMAT,
             grammar=GBNF_PM_NEXT,
         )
     except ValueError as exc:
@@ -989,9 +1006,12 @@ def main(argv: list[str] | None = None) -> int:
     queued_phase = ''
     try:
         pm_response = PMResponse.model_validate(queue)
+        if len(pm_response.work_items) != 1:
+            raise ValueError('pm_next must return exactly one work item')
         queued_phase = pm_response.phase
-        chosen_item = next(iter(pm_response.work_items), None)
-    except Exception:
+        chosen_item = pm_response.work_items[0]
+    except Exception as exc:
+        logger.warning(f'[pm_next] invalid_pm_response={exc}')
         chosen_item = None
         queued_phase = ''
 
@@ -1118,6 +1138,7 @@ def main(argv: list[str] | None = None) -> int:
                     user=impl_prompt,
                     schema_hint=SCHEMA_HINT_IMPL,
                     temperature=None,
+                    grammar_capable=grammar_capable,
                     response_format=WRITES_RESPONSE_FORMAT,
                     grammar=GBNF_WRITES,
                 )
@@ -1285,6 +1306,7 @@ def main(argv: list[str] | None = None) -> int:
                         user=q_fix_prompt,
                         schema_hint=SCHEMA_HINT_IMPL,
                         temperature=None,
+                        grammar_capable=grammar_capable,
                         response_format=WRITES_RESPONSE_FORMAT,
                         grammar=GBNF_WRITES,
                     )
@@ -1407,6 +1429,7 @@ def main(argv: list[str] | None = None) -> int:
                 user=verify_prompt,
                 schema_hint=SCHEMA_PM_VERIFY,
                 temperature=None,
+                grammar_capable=grammar_capable,
                 response_format=PM_VERIFY_RESPONSE_FORMAT,
                 grammar=GBNF_PM_VERIFY,
             )

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 
+import tools.plan_exec as plan_exec
 from tools.gbnf_grammars import (
     GBNF_PM_NEXT,
     GBNF_PM_VERIFY,
     GBNF_WRITES,
     is_local_backend,
 )
+from tools.json_utils import PM_NEXT_RESPONSE_FORMAT
 
 # ---------------------------------------------------------------------------
 # is_local_backend
@@ -63,6 +65,10 @@ def test_gbnf_pm_next_contains_required_rules() -> None:
     assert 'agent-val' in GBNF_PM_NEXT
     assert 'architect' in GBNF_PM_NEXT
     assert 'ui-ux' in GBNF_PM_NEXT
+
+
+def test_gbnf_pm_next_requires_exactly_one_item() -> None:
+    assert '( space "," space wi-item )*' not in GBNF_PM_NEXT
 
 
 def test_gbnf_pm_verify_contains_required_rules() -> None:
@@ -155,8 +161,6 @@ def test_valid_pm_verify_payload_is_parseable_json() -> None:
 
 def test_call_uses_grammar_for_local_backend(monkeypatch) -> None:
     """When grammar is provided and backend is local, extra_body is set."""
-    import tools.plan_exec as plan_exec
-
     captured_kwargs: dict = {}
 
     class _FakeClient:
@@ -186,6 +190,7 @@ def test_call_uses_grammar_for_local_backend(monkeypatch) -> None:
         model='test',
         system='sys',
         user='usr',
+        grammar_capable=True,
         grammar='root ::= string',
         response_format={'type': 'json_schema'},
     )
@@ -196,8 +201,6 @@ def test_call_uses_grammar_for_local_backend(monkeypatch) -> None:
 
 def test_call_uses_response_format_for_remote_backend(monkeypatch) -> None:
     """When backend is remote, response_format is used and grammar is ignored."""
-    import tools.plan_exec as plan_exec
-
     captured_kwargs: dict = {}
 
     class _FakeClient:
@@ -227,8 +230,61 @@ def test_call_uses_response_format_for_remote_backend(monkeypatch) -> None:
         model='test',
         system='sys',
         user='usr',
+        grammar_capable=False,
         grammar='root ::= string',
         response_format={'type': 'json_schema'},
     )
     assert 'response_format' in captured_kwargs
     assert 'extra_body' not in captured_kwargs
+
+
+def test_pm_next_response_format_requires_single_item() -> None:
+    schema = PM_NEXT_RESPONSE_FORMAT['json_schema']['schema']
+    item_schema = schema['properties']['work_items']['items']
+
+    assert schema['required'] == ['phase', 'work_items']
+    assert schema['additionalProperties'] is False
+    assert schema['properties']['work_items']['minItems'] == 1
+    assert schema['properties']['work_items']['maxItems'] == 1
+    assert item_schema['required'] == ['id', 'title', 'agent', 'acceptance', 'notes']
+    assert item_schema['additionalProperties'] is False
+    assert item_schema['properties']['agent']['enum'] == ['architect', 'ui-ux']
+    assert item_schema['properties']['acceptance']['minItems'] == 1
+
+
+def test_is_grammar_capable_defaults_true_for_local_url() -> None:
+    manifest = plan_exec.AgentManifest(
+        base_url='http://127.0.0.1:8080/v1',
+        api_key='test',
+    )
+
+    assert plan_exec.is_grammar_capable(manifest) is True
+
+
+def test_is_grammar_capable_defaults_false_for_remote_url() -> None:
+    manifest = plan_exec.AgentManifest(
+        base_url='https://api.openai.com/v1',
+        api_key='test',
+    )
+
+    assert plan_exec.is_grammar_capable(manifest) is False
+
+
+def test_is_grammar_capable_explicit_true_overrides_remote_url() -> None:
+    manifest = plan_exec.AgentManifest(
+        base_url='https://proxy.example.com/v1',
+        api_key='test',
+        grammar_capable=True,
+    )
+
+    assert plan_exec.is_grammar_capable(manifest) is True
+
+
+def test_is_grammar_capable_explicit_false_overrides_local_url() -> None:
+    manifest = plan_exec.AgentManifest(
+        base_url='http://localhost:8080/v1',
+        api_key='test',
+        grammar_capable=False,
+    )
+
+    assert plan_exec.is_grammar_capable(manifest) is False

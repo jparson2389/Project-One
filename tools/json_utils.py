@@ -39,6 +39,47 @@ WRITES_RESPONSE_FORMAT: dict = {
 }
 
 
+PM_NEXT_RESPONSE_FORMAT: dict = {
+    'type': 'json_schema',
+    'json_schema': {
+        'name': 'pm_next_response',
+        'strict': True,
+        'schema': {
+            'type': 'object',
+            'required': ['phase', 'work_items'],
+            'additionalProperties': False,
+            'properties': {
+                'phase': {'type': 'string'},
+                'work_items': {
+                    'type': 'array',
+                    'minItems': 1,
+                    'maxItems': 1,
+                    'items': {
+                        'type': 'object',
+                        'required': ['id', 'title', 'agent', 'acceptance', 'notes'],
+                        'additionalProperties': False,
+                        'properties': {
+                            'id': {'type': 'string'},
+                            'title': {'type': 'string'},
+                            'agent': {
+                                'type': 'string',
+                                'enum': ['architect', 'ui-ux'],
+                            },
+                            'acceptance': {
+                                'type': 'array',
+                                'minItems': 1,
+                                'items': {'type': 'string'},
+                            },
+                            'notes': {'type': 'string'},
+                        },
+                    },
+                },
+            },
+        },
+    },
+}
+
+
 PM_VERIFY_RESPONSE_FORMAT: dict = {
     'type': 'json_schema',
     'json_schema': {

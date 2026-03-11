@@ -278,3 +278,233 @@ def test_main_uses_pm_verify_response_schema(tmp_path, monkeypatch) -> None:
 
     assert result == 0
     assert schema['required'] == ['status', 'missing', 'notes']
+
+
+def test_main_uses_pm_next_response_schema(tmp_path, monkeypatch) -> None:
+    root = tmp_path
+    _configure_main_harness(monkeypatch, root)
+    monkeypatch.setattr(plan_exec, 'run_ps', lambda *_args, **_kwargs: (0, 'ok'))
+
+    pm_next_kwargs: dict[str, object] = {}
+
+    def _fake_call_json_with_retry(**kwargs):
+        stage = kwargs['stage']
+        if stage == 'pm_next':
+            pm_next_kwargs.update(kwargs)
+            return {
+                'phase': 'Phase 0',
+                'work_items': [
+                    {
+                        'id': 'phase_0__task',
+                        'title': 'Task',
+                        'agent': 'architect',
+                        'acceptance': ['Ship the feature'],
+                        'notes': '',
+                    }
+                ],
+            }
+        if stage == 'impl_architect':
+            return {
+                'writes': [
+                    {
+                        'path': 'src/aetherlink/example.py',
+                        'content': (
+                            'def feature() -> int:\n'
+                            "    '''Return a value.'''\n"
+                            '    return 1\n'
+                        ),
+                    }
+                ],
+                'notes': 'implemented',
+            }
+        if stage == 'pm_verify':
+            return {'status': 'pass', 'missing': [], 'notes': 'Looks good.'}
+        raise AssertionError(f'Unexpected stage: {stage}')
+
+    monkeypatch.setattr(plan_exec, 'call_json_with_retry', _fake_call_json_with_retry)
+
+    result = plan_exec.main([])
+
+    schema = pm_next_kwargs['response_format']['json_schema']['schema']  # pyright: ignore[reportIndexIssue]
+
+    assert result == 0
+    assert schema['required'] == ['phase', 'work_items']
+    assert schema['properties']['work_items']['minItems'] == 1
+    assert schema['properties']['work_items']['maxItems'] == 1
+
+
+def test_main_rejects_multi_item_pm_next_and_falls_back(
+    tmp_path, monkeypatch
+) -> None:
+    root = tmp_path
+    _configure_main_harness(monkeypatch, root)
+    monkeypatch.setattr(plan_exec, 'run_ps', lambda *_args, **_kwargs: (0, 'ok'))
+
+    observed_impl_prompt: dict[str, str] = {}
+
+    def _fake_call_json_with_retry(**kwargs):
+        stage = kwargs['stage']
+        if stage == 'pm_next':
+            return {
+                'phase': 'Phase 0',
+                'work_items': [
+                    {
+                        'id': 'phase_0__task',
+                        'title': 'Task',
+                        'agent': 'architect',
+                        'acceptance': ['Ship the feature'],
+                        'notes': '',
+                    },
+                    {
+                        'id': 'phase_0__other',
+                        'title': 'Other Task',
+                        'agent': 'ui-ux',
+                        'acceptance': ['Do another thing'],
+                        'notes': '',
+                    },
+                ],
+            }
+        if stage == 'impl_architect':
+            observed_impl_prompt['user'] = kwargs['user']
+            return {
+                'writes': [
+                    {
+                        'path': 'src/aetherlink/example.py',
+                        'content': (
+                            'def feature() -> int:\n'
+                            "    '''Return a value.'''\n"
+                            '    return 1\n'
+                        ),
+                    }
+                ],
+                'notes': 'implemented',
+            }
+        if stage == 'pm_verify':
+            return {'status': 'pass', 'missing': [], 'notes': 'Looks good.'}
+        raise AssertionError(f'Unexpected stage: {stage}')
+
+    monkeypatch.setattr(plan_exec, 'call_json_with_retry', _fake_call_json_with_retry)
+
+    result = plan_exec.main([])
+
+    assert result == 0
+    assert 'ID: phase_0__task' in observed_impl_prompt['user']
+    assert 'Title: Task' in observed_impl_prompt['user']
+
+
+def test_main_uses_explicit_grammar_capability_for_remote_manifest(
+    tmp_path, monkeypatch
+) -> None:
+    root = tmp_path
+    _configure_main_harness(monkeypatch, root)
+    (root / 'agent_manifest.json').write_text(
+        '{"base_url": "https://proxy.example.com/v1", "api_key": "test", '
+        '"grammar_capable": true}',
+        encoding='utf-8',
+    )
+    monkeypatch.setattr(plan_exec, 'run_ps', lambda *_args, **_kwargs: (0, 'ok'))
+
+    grammar_flags: dict[str, object] = {}
+
+    def _fake_call_json_with_retry(**kwargs):
+        stage = kwargs['stage']
+        grammar_flags[stage] = kwargs['grammar_capable']
+        if stage == 'pm_next':
+            return {
+                'phase': 'Phase 0',
+                'work_items': [
+                    {
+                        'id': 'phase_0__task',
+                        'title': 'Task',
+                        'agent': 'architect',
+                        'acceptance': ['Ship the feature'],
+                        'notes': '',
+                    }
+                ],
+            }
+        if stage == 'impl_architect':
+            return {
+                'writes': [
+                    {
+                        'path': 'src/aetherlink/example.py',
+                        'content': (
+                            'def feature() -> int:\n'
+                            "    '''Return a value.'''\n"
+                            '    return 1\n'
+                        ),
+                    }
+                ],
+                'notes': 'implemented',
+            }
+        if stage == 'pm_verify':
+            return {'status': 'pass', 'missing': [], 'notes': 'Looks good.'}
+        raise AssertionError(f'Unexpected stage: {stage}')
+
+    monkeypatch.setattr(plan_exec, 'call_json_with_retry', _fake_call_json_with_retry)
+
+    result = plan_exec.main([])
+
+    assert result == 0
+    assert grammar_flags == {
+        'pm_next': True,
+        'impl_architect': True,
+        'pm_verify': True,
+    }
+
+
+def test_main_uses_response_format_only_when_manifest_disables_grammar(
+    tmp_path, monkeypatch
+) -> None:
+    root = tmp_path
+    _configure_main_harness(monkeypatch, root)
+    (root / 'agent_manifest.json').write_text(
+        '{"base_url": "http://127.0.0.1:8080/v1", "api_key": "test", '
+        '"grammar_capable": false}',
+        encoding='utf-8',
+    )
+    monkeypatch.setattr(plan_exec, 'run_ps', lambda *_args, **_kwargs: (0, 'ok'))
+
+    call_records: dict[str, dict[str, object]] = {}
+
+    def _fake_call_json_with_retry(**kwargs):
+        stage = kwargs['stage']
+        call_records[stage] = kwargs
+        if stage == 'pm_next':
+            return {
+                'phase': 'Phase 0',
+                'work_items': [
+                    {
+                        'id': 'phase_0__task',
+                        'title': 'Task',
+                        'agent': 'architect',
+                        'acceptance': ['Ship the feature'],
+                        'notes': '',
+                    }
+                ],
+            }
+        if stage == 'impl_architect':
+            return {
+                'writes': [
+                    {
+                        'path': 'src/aetherlink/example.py',
+                        'content': (
+                            'def feature() -> int:\n'
+                            "    '''Return a value.'''\n"
+                            '    return 1\n'
+                        ),
+                    }
+                ],
+                'notes': 'implemented',
+            }
+        if stage == 'pm_verify':
+            return {'status': 'pass', 'missing': [], 'notes': 'Looks good.'}
+        raise AssertionError(f'Unexpected stage: {stage}')
+
+    monkeypatch.setattr(plan_exec, 'call_json_with_retry', _fake_call_json_with_retry)
+
+    result = plan_exec.main([])
+
+    assert result == 0
+    assert call_records['pm_next']['grammar_capable'] is False
+    assert call_records['impl_architect']['grammar_capable'] is False
+    assert call_records['pm_verify']['grammar_capable'] is False

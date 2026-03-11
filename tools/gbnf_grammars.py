@@ -68,7 +68,7 @@ notes-key ::= "\"notes\""
 
 agent-val ::= "\"architect\"" | "\"ui-ux\""
 
-wi-arr    ::= "[" space wi-item ( space "," space wi-item )* space "]"
+wi-arr    ::= "[" space wi-item space "]"
 wi-item   ::= "{" space id-key space ":" space string space "," space title-key space ":" space string space "," space agent-key space ":" space agent-val space "," space acc-key space ":" space str-arr space "," space notes-key space ":" space string space "}"
 
 str-arr   ::= "[" space string ( space "," space string )* space "]"
